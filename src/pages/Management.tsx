@@ -36,6 +36,7 @@ export default function Management() {
   const [violationModalOpen, setViolationModalOpen] = useState(false);
   const [violationHandleModalOpen, setViolationHandleModalOpen] = useState(false);
   const [visitModalOpen, setVisitModalOpen] = useState(false);
+  const [remoteVisitModalOpen, setRemoteVisitModalOpen] = useState(false);
   const [selectedViolation, setSelectedViolation] = useState<Violation | null>(null);
 
   const {
@@ -45,6 +46,7 @@ export default function Management() {
     visits,
     addViolation,
     updateViolationStatus,
+    updateViolationPunishment,
     addVisit,
     updateVisitStatus,
   } = useAppStore();
@@ -112,6 +114,7 @@ export default function Management() {
 
   const handleViolationComplete = () => {
     if (!selectedViolation) return;
+    updateViolationPunishment(selectedViolation.id, punishmentInput);
     updateViolationStatus(selectedViolation.id, "已处理");
     setViolationHandleModalOpen(false);
     setSelectedViolation(null);
@@ -852,7 +855,7 @@ export default function Management() {
               </div>
             </div>
 
-            <div className="card bg-gradient-to-br from-police-50 to-police-100 border-0">
+            <div className="card bg-gradient-to-br from-police-50 to-police-100 border-0 cursor-pointer" onClick={() => setRemoteVisitModalOpen(true)}>
               <div className="flex items-center gap-3">
                 <div className="p-3 bg-police-600 rounded-sm">
                   <Video className="w-6 h-6 text-white" />
@@ -1063,6 +1066,15 @@ export default function Management() {
                 />
               </div>
             )}
+
+            {selectedViolation.status === "已处理" && selectedViolation.punishment && (
+              <div>
+                <label className="form-label">处理结果</label>
+                <p className="text-sm text-slate-700 bg-slate-50 p-3 rounded-sm">
+                  {selectedViolation.punishment}
+                </p>
+              </div>
+            )}
           </div>
         )}
       </Modal>
@@ -1210,6 +1222,52 @@ export default function Management() {
               }
             />
           </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={remoteVisitModalOpen}
+        onClose={() => setRemoteVisitModalOpen(false)}
+        title="远程视频会见"
+        width="max-w-lg"
+        footer={
+          <button
+            className="btn-secondary"
+            onClick={() => setRemoteVisitModalOpen(false)}
+          >
+            关闭
+          </button>
+        }
+      >
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 p-4 bg-police-50 rounded-sm">
+            <Video className="w-8 h-8 text-police-600" />
+            <div>
+              <p className="font-medium text-police-900">远程视频会见系统</p>
+              <p className="text-xs text-police-700">通过远程视频方式与家属进行会见</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="p-3 bg-slate-50 rounded-sm">
+              <p className="text-slate-500 mb-1">可用会见室</p>
+              <p className="font-medium text-slate-800">远程会见室A、远程会见室B</p>
+            </div>
+            <div className="p-3 bg-slate-50 rounded-sm">
+              <p className="text-slate-500 mb-1">设备状态</p>
+              <p className="font-medium text-health-600">在线</p>
+            </div>
+            <div className="p-3 bg-slate-50 rounded-sm">
+              <p className="text-slate-500 mb-1">今日预约</p>
+              <p className="font-medium text-slate-800">
+                {visits.filter((v) => v.visitType === "远程会见" && v.status === "已批准").length} 次
+              </p>
+            </div>
+            <div className="p-3 bg-slate-50 rounded-sm">
+              <p className="text-slate-500 mb-1">系统版本</p>
+              <p className="font-medium text-slate-800">v3.2.1</p>
+            </div>
+          </div>
+          <p className="text-xs text-slate-400 text-center">如需技术支持，请联系信息中心（内线 8001）</p>
         </div>
       </Modal>
     </PageContainer>

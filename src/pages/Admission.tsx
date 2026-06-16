@@ -40,6 +40,11 @@ export default function Admission() {
   const [showAdmitModal, setShowAdmitModal] = useState(false);
   const [selectedDetainee, setSelectedDetainee] = useState<string | null>(null);
   const [showCheckupModal, setShowCheckupModal] = useState(false);
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
+  const [filterLevel, setFilterLevel] = useState<string>("");
+  const [filterStatus, setFilterStatus] = useState<string>("");
+  const [filterGender, setFilterGender] = useState<string>("");
+  const [printReportModalOpen, setPrintReportModalOpen] = useState(false);
 
   const { detainees, healthCheckups, addDetainee, addHealthCheckup } = useAppStore();
 
@@ -73,12 +78,18 @@ export default function Admission() {
 
   const filteredDetainees = useMemo(() =>
     detainees.filter(
-      (d) =>
-        d.name.includes(searchText) ||
-        d.idCard.includes(searchText) ||
-        d.id.includes(searchText)
+      (d) => {
+        const matchesSearch =
+          d.name.includes(searchText) ||
+          d.idCard.includes(searchText) ||
+          d.id.includes(searchText);
+        const matchesLevel = !filterLevel || d.currentLevel === filterLevel;
+        const matchesStatus = !filterStatus || d.status === filterStatus;
+        const matchesGender = !filterGender || d.gender === filterGender;
+        return matchesSearch && matchesLevel && matchesStatus && matchesGender;
+      }
     ),
-  [detainees, searchText]);
+  [detainees, searchText, filterLevel, filterStatus, filterGender]);
 
   const pendingCheckupCount = useMemo(() =>
     detainees.filter((d) =>
@@ -367,7 +378,7 @@ export default function Admission() {
                         className="pl-9 pr-4 py-2 w-48 text-sm border border-slate-200 rounded-sm focus:outline-none focus:ring-2 focus:ring-police-500"
                       />
                     </div>
-                    <button className="btn-secondary">
+                    <button className="btn-secondary" onClick={() => setFilterModalOpen(true)}>
                       <Filter className="w-4 h-4" />
                       筛选
                     </button>
@@ -433,7 +444,7 @@ export default function Admission() {
                     <Camera className="w-10 h-10 text-slate-300 mb-2" />
                     <p className="text-xs text-slate-400">证件照片</p>
                   </div>
-                  <button className="btn-secondary w-full">
+                  <button className="btn-secondary w-full" onClick={() => alert("照片上传功能开发中")}>
                     <Upload className="w-4 h-4" />
                     上传照片
                   </button>
@@ -847,7 +858,7 @@ export default function Admission() {
                   <Stethoscope className="w-4 h-4" />
                   提交体检评估
                 </button>
-                <button className="btn-secondary">打印体检报告</button>
+                <button className="btn-secondary" onClick={() => setPrintReportModalOpen(true)}>打印体检报告</button>
               </div>
             </div>
           </div>
@@ -973,6 +984,236 @@ export default function Admission() {
               }
             />
           </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={filterModalOpen}
+        onClose={() => setFilterModalOpen(false)}
+        title="筛选条件"
+        width="max-w-md"
+        footer={
+          <>
+            <button
+              className="btn-secondary"
+              onClick={() => {
+                setFilterLevel("");
+                setFilterStatus("");
+                setFilterGender("");
+              }}
+            >
+              重置
+            </button>
+            <button className="btn-primary" onClick={() => setFilterModalOpen(false)}>
+              确定
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-5">
+          <div>
+            <label className="label">管理等级</label>
+            <div className="flex flex-wrap gap-2 mt-2">
+              {["一级", "二级", "三级", "四级"].map((level) => (
+                <button
+                  key={level}
+                  className={`px-4 py-2 text-sm rounded-sm border transition-colors ${
+                    filterLevel === level
+                      ? "bg-police-50 border-police-500 text-police-700 font-medium"
+                      : "border-slate-200 hover:border-slate-300 text-slate-600"
+                  }`}
+                  onClick={() => setFilterLevel(filterLevel === level ? "" : level)}
+                >
+                  {level}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="label">状态</label>
+            <div className="flex flex-wrap gap-2 mt-2">
+              {["正常", "治疗中", "隔离", "离所"].map((status) => (
+                <button
+                  key={status}
+                  className={`px-4 py-2 text-sm rounded-sm border transition-colors ${
+                    filterStatus === status
+                      ? "bg-police-50 border-police-500 text-police-700 font-medium"
+                      : "border-slate-200 hover:border-slate-300 text-slate-600"
+                  }`}
+                  onClick={() => setFilterStatus(filterStatus === status ? "" : status)}
+                >
+                  {status}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="label">性别</label>
+            <div className="flex gap-2 mt-2">
+              {["男", "女"].map((gender) => (
+                <button
+                  key={gender}
+                  className={`px-4 py-2 text-sm rounded-sm border transition-colors ${
+                    filterGender === gender
+                      ? "bg-police-50 border-police-500 text-police-700 font-medium"
+                      : "border-slate-200 hover:border-slate-300 text-slate-600"
+                  }`}
+                  onClick={() => setFilterGender(filterGender === gender ? "" : gender)}
+                >
+                  {gender}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={showAdmitModal}
+        onClose={() => setShowAdmitModal(false)}
+        title="人员详情"
+        width="max-w-lg"
+      >
+        {(() => {
+          const d = detainees.find((item) => item.id === selectedDetainee);
+          if (!d) return <p className="text-slate-500">未找到人员信息</p>;
+          return (
+            <div className="space-y-4">
+              <div className="flex items-center gap-4 pb-4 border-b border-slate-100">
+                <div className="w-16 h-16 rounded-full bg-police-100 flex items-center justify-center">
+                  <User className="w-8 h-8 text-police-600" />
+                </div>
+                <div>
+                  <h4 className="text-lg font-semibold text-slate-800">{d.name}</h4>
+                  <p className="text-sm text-slate-500">{d.id}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+                <div>
+                  <span className="text-xs text-slate-400">身份证号</span>
+                  <p className="text-sm font-medium text-slate-800">{d.idCard}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-slate-400">性别</span>
+                  <p className="text-sm font-medium text-slate-800">{d.gender}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-slate-400">出生日期</span>
+                  <p className="text-sm font-medium text-slate-800">{d.birthDate}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-slate-400">民族</span>
+                  <p className="text-sm font-medium text-slate-800">{d.ethnicity}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-slate-400">文化程度</span>
+                  <p className="text-sm font-medium text-slate-800">{d.education}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-slate-400">入所日期</span>
+                  <p className="text-sm font-medium text-slate-800">{d.admitDate}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-slate-400">戒毒期限</span>
+                  <p className="text-sm font-medium text-slate-800">{d.durationMonths}个月</p>
+                </div>
+                <div>
+                  <span className="text-xs text-slate-400">管理等级</span>
+                  <p className="text-sm font-medium text-slate-800">{d.currentLevel}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-slate-400">当前状态</span>
+                  <p className="text-sm font-medium text-slate-800">{d.status}</p>
+                </div>
+              </div>
+              <div>
+                <span className="text-xs text-slate-400">户籍地址</span>
+                <p className="text-sm font-medium text-slate-800">{d.address}</p>
+              </div>
+            </div>
+          );
+        })()}
+      </Modal>
+
+      <Modal
+        isOpen={printReportModalOpen}
+        onClose={() => setPrintReportModalOpen(false)}
+        title="体检报告预览"
+        width="max-w-2xl"
+        footer={
+          <>
+            <button
+              className="btn-secondary"
+              onClick={() => setPrintReportModalOpen(false)}
+            >
+              取消
+            </button>
+            <button
+              className="btn-primary"
+              onClick={() => {
+                alert("体检报告已发送至打印队列");
+                setPrintReportModalOpen(false);
+              }}
+            >
+              确认打印
+            </button>
+          </>
+        }
+      >
+        <div className="border border-slate-200 rounded-sm p-6 space-y-4">
+          <div className="text-center border-b border-slate-200 pb-4">
+            <h4 className="text-lg font-semibold text-slate-800">入所健康检查报告</h4>
+            <p className="text-sm text-slate-500 mt-1">检查日期：{checkupForm.checkDate}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="text-slate-500">人员姓名：</span>
+              <span className="font-medium">{checkupForm.detaineeName || "-"}</span>
+            </div>
+            <div>
+              <span className="text-slate-500">人员编号：</span>
+              <span className="font-medium">{checkupForm.detaineeId || "-"}</span>
+            </div>
+          </div>
+          <div className="border-t border-slate-100 pt-4">
+            <h5 className="text-sm font-semibold text-slate-700 mb-3">体格检查</h5>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <span className="text-slate-500">身高：</span>
+                <span className="font-medium">{checkupForm.height} cm</span>
+              </div>
+              <div>
+                <span className="text-slate-500">体重：</span>
+                <span className="font-medium">{checkupForm.weight} kg</span>
+              </div>
+              <div>
+                <span className="text-slate-500">血压：</span>
+                <span className="font-medium">{checkupForm.bloodPressure} mmHg</span>
+              </div>
+              <div>
+                <span className="text-slate-500">心率：</span>
+                <span className="font-medium">{checkupForm.heartRate} 次/分</span>
+              </div>
+              <div>
+                <span className="text-slate-500">血型：</span>
+                <span className="font-medium">{checkupForm.bloodType}</span>
+              </div>
+              <div>
+                <span className="text-slate-500">传染病筛查：</span>
+                <span className="font-medium">{checkupForm.infectiousDisease ? "阳性" : "阴性"}</span>
+              </div>
+              <div>
+                <span className="text-slate-500">依赖程度：</span>
+                <span className="font-medium">{checkupForm.dependenceLevel}级</span>
+              </div>
+            </div>
+          </div>
+          {checkupForm.notes && (
+            <div className="border-t border-slate-100 pt-4">
+              <h5 className="text-sm font-semibold text-slate-700 mb-2">医生评估意见</h5>
+              <p className="text-sm text-slate-600">{checkupForm.notes}</p>
+            </div>
+          )}
         </div>
       </Modal>
     </PageContainer>

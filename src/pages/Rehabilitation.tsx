@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import ReactECharts from "echarts-for-react";
 import {
   Dumbbell,
@@ -30,6 +30,18 @@ const tabs = [
 export default function Rehabilitation() {
   const [activeTab, setActiveTab] = useState("physical");
   const [trainingModalOpen, setTrainingModalOpen] = useState(false);
+  const [assessmentModalOpen, setAssessmentModalOpen] = useState(false);
+  const [courseDetailModalOpen, setCourseDetailModalOpen] = useState(false);
+  const [selectedCourse, setSelectedCourse] = useState<{
+    id: number;
+    name: string;
+    category: string;
+    totalHours: number;
+    completedHours: number;
+    students: number;
+    teacher: string;
+    color: string;
+  } | null>(null);
 
   const { detainees, trainingRecords, addTrainingRecord } = useAppStore();
 
@@ -173,93 +185,156 @@ export default function Rehabilitation() {
     { key: "coach", title: "授课老师", width: "100px" },
   ];
 
-  const performanceTrendOption = {
-    tooltip: { trigger: "axis" },
-    legend: { data: ["平均评分", "参与人数"], top: 0 },
-    grid: { left: 40, right: 40, top: 40, bottom: 30 },
-    xAxis: {
-      type: "category",
-      data: ["第1周", "第2周", "第3周", "第4周", "第5周", "第6周"],
-      axisLine: { lineStyle: { color: "#cbd5e1" } },
-    },
-    yAxis: [
-      {
-        type: "value",
-        name: "评分",
-        max: 100,
-        axisLine: { show: false },
-        splitLine: { lineStyle: { color: "#f1f5f9" } },
+  const performanceTrendOption = useMemo(() => {
+    const weekMap = new Map<string, { totalPerf: number; count: number }>();
+    physicalRecords.forEach((r) => {
+      const d = new Date(r.date);
+      const weekStart = new Date(d);
+      weekStart.setDate(d.getDate() - d.getDay() + 1);
+      const key = weekStart.toISOString().split("T")[0];
+      const entry = weekMap.get(key) ?? { totalPerf: 0, count: 0 };
+      entry.totalPerf += r.performance;
+      entry.count += 1;
+      weekMap.set(key, entry);
+    });
+    const sortedWeeks = [...weekMap.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    const labels = sortedWeeks.map(([key]) => {
+      const d = new Date(key);
+      return `${d.getMonth() + 1}/${d.getDate()}周`;
+    });
+    const avgScores = sortedWeeks.map(([, v]) => +(v.totalPerf / v.count).toFixed(1));
+    const counts = sortedWeeks.map(([, v]) => v.count);
+    return {
+      tooltip: { trigger: "axis" },
+      legend: { data: ["平均评分", "参与人数"], top: 0 },
+      grid: { left: 40, right: 40, top: 40, bottom: 30 },
+      xAxis: {
+        type: "category",
+        data: labels,
+        axisLine: { lineStyle: { color: "#cbd5e1" } },
       },
-      {
-        type: "value",
-        name: "人数",
-        axisLine: { show: false },
-        splitLine: { show: false },
-      },
-    ],
-    series: [
-      {
-        name: "平均评分",
-        type: "line",
-        smooth: true,
-        data: [65, 70, 72, 78, 82, 85],
-        itemStyle: { color: "#1e40af" },
-        lineStyle: { color: "#1e40af", width: 3 },
-        symbol: "circle",
-        symbolSize: 8,
-        areaStyle: {
-          color: {
-            type: "linear",
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              { offset: 0, color: "rgba(30, 64, 175, 0.3)" },
-              { offset: 1, color: "rgba(30, 64, 175, 0.02)" },
-            ],
+      yAxis: [
+        {
+          type: "value",
+          name: "评分",
+          max: 100,
+          axisLine: { show: false },
+          splitLine: { lineStyle: { color: "#f1f5f9" } },
+        },
+        {
+          type: "value",
+          name: "人数",
+          axisLine: { show: false },
+          splitLine: { show: false },
+        },
+      ],
+      series: [
+        {
+          name: "平均评分",
+          type: "line",
+          smooth: true,
+          data: avgScores,
+          itemStyle: { color: "#1e40af" },
+          lineStyle: { color: "#1e40af", width: 3 },
+          symbol: "circle",
+          symbolSize: 8,
+          areaStyle: {
+            color: {
+              type: "linear",
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [
+                { offset: 0, color: "rgba(30, 64, 175, 0.3)" },
+                { offset: 1, color: "rgba(30, 64, 175, 0.02)" },
+              ],
+            },
           },
         },
-      },
-      {
-        name: "参与人数",
-        type: "bar",
-        yAxisIndex: 1,
-        data: [68, 72, 75, 78, 80, 82],
-        itemStyle: {
-          color: "rgba(6, 95, 70, 0.6)",
-          borderRadius: [4, 4, 0, 0],
+        {
+          name: "参与人数",
+          type: "bar",
+          yAxisIndex: 1,
+          data: counts,
+          itemStyle: {
+            color: "rgba(6, 95, 70, 0.6)",
+            borderRadius: [4, 4, 0, 0],
+          },
+          barWidth: 20,
         },
-        barWidth: 20,
-      },
-    ],
-  };
+      ],
+    };
+  }, [physicalRecords]);
 
-  const skillDistributionOption = {
-    tooltip: { trigger: "item" },
-    legend: { bottom: 0 },
-    series: [
-      {
-        type: "pie",
-        radius: ["35%", "65%"],
-        center: ["50%", "45%"],
-        roseType: "radius",
-        itemStyle: { borderRadius: 4, borderColor: "#fff", borderWidth: 2 },
-        label: {
-          formatter: "{b}\n{c}人",
-          fontSize: 12,
+  const skillDistributionOption = useMemo(() => {
+    const contentMap = new Map<string, number>();
+    skillRecords.forEach((r) => {
+      contentMap.set(r.content, (contentMap.get(r.content) ?? 0) + 1);
+    });
+    const palette = ["#ec4899", "#f59e0b", "#1e40af", "#065f46", "#7c3aed", "#0891b2"];
+    const data = [...contentMap.entries()].map(([name, value], i) => ({
+      value,
+      name,
+      itemStyle: { color: palette[i % palette.length] },
+    }));
+    return {
+      tooltip: { trigger: "item" },
+      legend: { bottom: 0 },
+      series: [
+        {
+          type: "pie",
+          radius: ["35%", "65%"],
+          center: ["50%", "45%"],
+          roseType: "radius" as const,
+          itemStyle: { borderRadius: 4, borderColor: "#fff", borderWidth: 2 },
+          label: {
+            formatter: "{b}\n{c}人",
+            fontSize: 12,
+          },
+          data,
         },
-        data: [
-          { value: 28, name: "美容美发", itemStyle: { color: "#ec4899" } },
-          { value: 35, name: "中式烹饪", itemStyle: { color: "#f59e0b" } },
-          { value: 22, name: "电工基础", itemStyle: { color: "#1e40af" } },
-          { value: 18, name: "计算机办公", itemStyle: { color: "#065f46" } },
-          { value: 15, name: "汽车维修", itemStyle: { color: "#7c3aed" } },
-          { value: 12, name: "家政服务", itemStyle: { color: "#0891b2" } },
-        ],
-      },
-    ],
-  };
+      ],
+    };
+  }, [skillRecords]);
+
+  const physicalStats = useMemo(() => {
+    const contentMap = new Map<string, { count: number; totalPerf: number }>();
+    physicalRecords.forEach((r) => {
+      const entry = contentMap.get(r.content) ?? { count: 0, totalPerf: 0 };
+      entry.count += 1;
+      entry.totalPerf += r.performance;
+      contentMap.set(r.content, entry);
+    });
+    const maxCount = Math.max(...[...contentMap.values()].map((v) => v.count), 1);
+    return [...contentMap.entries()]
+      .sort((a, b) => b[1].count - a[1].count)
+      .map(([name, { count, totalPerf }]) => ({
+        name,
+        count,
+        avgPerformance: +(totalPerf / count).toFixed(1),
+        progress: Math.round((count / maxCount) * 100),
+      }));
+  }, [physicalRecords]);
+
+  const skillAssessmentSummary = useMemo(() => {
+    const contentMap = new Map<string, { count: number; totalPerf: number; passCount: number }>();
+    skillRecords.forEach((r) => {
+      const entry = contentMap.get(r.content) ?? { count: 0, totalPerf: 0, passCount: 0 };
+      entry.count += 1;
+      entry.totalPerf += r.performance;
+      if (r.performance >= 60) entry.passCount += 1;
+      contentMap.set(r.content, entry);
+    });
+    return [...contentMap.entries()]
+      .sort((a, b) => b[1].count - a[1].count)
+      .map(([name, { count, totalPerf, passCount }]) => ({
+        name,
+        count,
+        avgPerformance: +(totalPerf / count).toFixed(1),
+        passRate: +((passCount / count) * 100).toFixed(1),
+      }));
+  }, [skillRecords]);
 
   const skillCourses = [
     {
@@ -339,7 +414,7 @@ export default function Rehabilitation() {
       breadcrumbs={[{ label: "康复训练" }]}
       actions={
         <div className="flex gap-3">
-          <button className="btn-secondary">
+          <button className="btn-secondary" onClick={() => setAssessmentModalOpen(true)}>
             <Award className="w-4 h-4" />
             技能考核
           </button>
@@ -469,18 +544,15 @@ export default function Rehabilitation() {
             <div className="card">
               <h3 className="section-title">训练项目</h3>
               <div className="space-y-3">
-                {[
-                  { name: "晨跑锻炼", count: 486, progress: 95 },
-                  { name: "力量训练", count: 312, progress: 78 },
-                  { name: "球类运动", count: 256, progress: 65 },
-                  { name: "瑜伽放松", count: 198, progress: 52 },
-                  { name: "拓展训练", count: 86, progress: 35 },
-                ].map((item, index) => (
+                {physicalStats.length === 0 && (
+                  <p className="text-sm text-slate-400 text-center py-4">暂无训练数据</p>
+                )}
+                {physicalStats.map((item, index) => (
                   <div key={index}>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-sm text-slate-700">{item.name}</span>
                       <span className="text-xs text-slate-500">
-                        {item.count}人次
+                        {item.count}人次 · 均分{item.avgPerformance}
                       </span>
                     </div>
                     <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
@@ -550,10 +622,22 @@ export default function Rehabilitation() {
                     </div>
                   </div>
                   <div className="flex gap-2 pt-2">
-                    <button className="flex-1 btn-secondary text-xs">
+                    <button
+                      className="flex-1 btn-secondary text-xs"
+                      onClick={() => {
+                        setSelectedCourse(course);
+                        setCourseDetailModalOpen(true);
+                      }}
+                    >
                       查看详情
                     </button>
-                    <button className="flex-1 btn-primary text-xs">
+                    <button
+                      className="flex-1 btn-primary text-xs"
+                      onClick={() => {
+                        setSelectedCourse(course);
+                        setAssessmentModalOpen(true);
+                      }}
+                    >
                       <CheckCircle className="w-3.5 h-3.5" />
                       考核
                     </button>
@@ -720,6 +804,163 @@ export default function Rehabilitation() {
             </div>
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        isOpen={assessmentModalOpen}
+        onClose={() => {
+          setAssessmentModalOpen(false);
+          setSelectedCourse(null);
+        }}
+        title={selectedCourse ? `${selectedCourse.name} - 技能考核` : "技能考核总览"}
+        width="max-w-2xl"
+        footer={
+          <button
+            className="btn-secondary"
+            onClick={() => {
+              setAssessmentModalOpen(false);
+              setSelectedCourse(null);
+            }}
+          >
+            关闭
+          </button>
+        }
+      >
+        {selectedCourse ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 bg-slate-50 rounded-lg">
+                <p className="text-sm text-slate-500">课程名称</p>
+                <p className="text-lg font-semibold text-slate-800">{selectedCourse.name}</p>
+              </div>
+              <div className="p-4 bg-slate-50 rounded-lg">
+                <p className="text-sm text-slate-500">授课老师</p>
+                <p className="text-lg font-semibold text-slate-800">{selectedCourse.teacher}</p>
+              </div>
+              <div className="p-4 bg-slate-50 rounded-lg">
+                <p className="text-sm text-slate-500">学员人数</p>
+                <p className="text-lg font-semibold text-slate-800">{selectedCourse.students}人</p>
+              </div>
+              <div className="p-4 bg-slate-50 rounded-lg">
+                <p className="text-sm text-slate-500">课程进度</p>
+                <p className="text-lg font-semibold text-slate-800">
+                  {selectedCourse.completedHours}/{selectedCourse.totalHours}课时
+                </p>
+              </div>
+            </div>
+            {(() => {
+              const courseRecords = skillRecords.filter((r) => r.content === selectedCourse.name);
+              const passCount = courseRecords.filter((r) => r.performance >= 60).length;
+              const avgScore =
+                courseRecords.length > 0
+                  ? (courseRecords.reduce((s, r) => s + r.performance, 0) / courseRecords.length).toFixed(1)
+                  : "0";
+              return (
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="p-4 bg-emerald-50 rounded-lg text-center">
+                    <p className="text-2xl font-bold text-emerald-600">{courseRecords.length}</p>
+                    <p className="text-xs text-slate-500">考核次数</p>
+                  </div>
+                  <div className="p-4 bg-blue-50 rounded-lg text-center">
+                    <p className="text-2xl font-bold text-blue-600">{avgScore}</p>
+                    <p className="text-xs text-slate-500">平均成绩</p>
+                  </div>
+                  <div className="p-4 bg-amber-50 rounded-lg text-center">
+                    <p className="text-2xl font-bold text-amber-600">
+                      {courseRecords.length > 0 ? ((passCount / courseRecords.length) * 100).toFixed(0) : 0}%
+                    </p>
+                    <p className="text-xs text-slate-500">及格率</p>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {skillAssessmentSummary.length === 0 && (
+              <p className="text-sm text-slate-400 text-center py-4">暂无考核数据</p>
+            )}
+            {skillAssessmentSummary.map((item, index) => (
+              <div key={index} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                <div>
+                  <span className="text-sm font-medium text-slate-700">{item.name}</span>
+                  <span className="text-xs text-slate-400 ml-2">{item.count}人次</span>
+                </div>
+                <div className="flex gap-4">
+                  <span className="text-sm text-blue-600">均分 {item.avgPerformance}</span>
+                  <span className="text-sm text-emerald-600">及格率 {item.passRate}%</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={courseDetailModalOpen}
+        onClose={() => {
+          setCourseDetailModalOpen(false);
+          setSelectedCourse(null);
+        }}
+        title={selectedCourse ? selectedCourse.name : "课程详情"}
+        width="max-w-lg"
+        footer={
+          <button
+            className="btn-secondary"
+            onClick={() => {
+              setCourseDetailModalOpen(false);
+              setSelectedCourse(null);
+            }}
+          >
+            关闭
+          </button>
+        }
+      >
+        {selectedCourse && (
+          <div className="space-y-4">
+            <div className={`h-20 bg-gradient-to-br ${selectedCourse.color} rounded-lg flex items-center justify-between px-6`}>
+              <div>
+                <StatusBadge type="default">{selectedCourse.category}</StatusBadge>
+                <h4 className="text-white text-lg font-semibold mt-1">{selectedCourse.name}</h4>
+              </div>
+              <GraduationCap className="w-10 h-10 text-white/30" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <p className="text-xs text-slate-500">授课老师</p>
+                <p className="text-sm font-medium text-slate-800">{selectedCourse.teacher}</p>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <p className="text-xs text-slate-500">学员人数</p>
+                <p className="text-sm font-medium text-slate-800">{selectedCourse.students}人</p>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <p className="text-xs text-slate-500">总课时</p>
+                <p className="text-sm font-medium text-slate-800">{selectedCourse.totalHours}课时</p>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <p className="text-xs text-slate-500">已完成</p>
+                <p className="text-sm font-medium text-slate-800">{selectedCourse.completedHours}课时</p>
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1 text-sm">
+                <span className="text-slate-500">课程进度</span>
+                <span className="text-slate-700 font-medium">
+                  {((selectedCourse.completedHours / selectedCourse.totalHours) * 100).toFixed(0)}%
+                </span>
+              </div>
+              <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full bg-gradient-to-r ${selectedCourse.color} rounded-full`}
+                  style={{
+                    width: `${(selectedCourse.completedHours / selectedCourse.totalHours) * 100}%`,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </Modal>
     </PageContainer>
   );

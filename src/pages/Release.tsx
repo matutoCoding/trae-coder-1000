@@ -38,6 +38,17 @@ export default function Release() {
   const [selectedRelease, setSelectedRelease] = useState<Release | null>(null);
   const [releaseDetailModalOpen, setReleaseDetailModalOpen] = useState(false);
 
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportScope, setExportScope] = useState("全部记录");
+  const [exportFormat, setExportFormat] = useState("Excel");
+
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [selectedReportRelease, setSelectedReportRelease] = useState<Release | null>(null);
+
+  const [documentModalOpen, setDocumentModalOpen] = useState(false);
+  const [selectedDocRelease, setSelectedDocRelease] = useState<Release | null>(null);
+  const [documentType, setDocumentType] = useState("解除强制隔离戒毒决定书");
+
   const {
     detainees,
     releases,
@@ -377,7 +388,7 @@ export default function Release() {
       breadcrumbs={[{ label: "解除回归" }]}
       actions={
         <div className="flex gap-3">
-          <button className="btn-secondary">
+          <button className="btn-secondary" onClick={() => setExportModalOpen(true)}>
             <Download className="w-4 h-4" />
             批量导出
           </button>
@@ -522,11 +533,26 @@ export default function Release() {
                   )}
 
                   <div className="flex gap-2 pt-3 border-t border-slate-100">
-                    <button className="flex-1 btn-secondary text-xs">
+                    <button
+                      className="flex-1 btn-secondary text-xs"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedReportRelease(release);
+                        setReportModalOpen(true);
+                      }}
+                    >
                       <FileText className="w-3.5 h-3.5" />
                       鉴定报告
                     </button>
-                    <button className="flex-1 btn-primary text-xs">
+                    <button
+                      className="flex-1 btn-primary text-xs"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedDocRelease(release);
+                        setDocumentType("解除强制隔离戒毒决定书");
+                        setDocumentModalOpen(true);
+                      }}
+                    >
                       <Download className="w-3.5 h-3.5" />
                       办理文书
                     </button>
@@ -1159,6 +1185,240 @@ export default function Release() {
             </div>
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        isOpen={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        title="批量导出"
+        width="max-w-md"
+        footer={
+          <>
+            <button
+              className="btn-secondary"
+              onClick={() => setExportModalOpen(false)}
+            >
+              取消
+            </button>
+            <button
+              className="btn-primary"
+              onClick={() => {
+                alert("数据导出任务已提交，请稍后下载");
+                setExportModalOpen(false);
+              }}
+            >
+              <Download className="w-4 h-4" />
+              确认导出
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-5">
+          <div>
+            <label className="form-label">导出范围</label>
+            <div className="space-y-2">
+              {["全部记录", "仅解除记录", "仅照管记录"].map((scope) => (
+                <label
+                  key={scope}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <input
+                    type="radio"
+                    name="exportScope"
+                    checked={exportScope === scope}
+                    onChange={() => setExportScope(scope)}
+                    className="accent-police-600"
+                  />
+                  <span className="text-sm text-slate-700">{scope}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="form-label">导出格式</label>
+            <div className="flex gap-4">
+              {["Excel", "PDF"].map((fmt) => (
+                <label
+                  key={fmt}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <input
+                    type="radio"
+                    name="exportFormat"
+                    checked={exportFormat === fmt}
+                    onChange={() => setExportFormat(fmt)}
+                    className="accent-police-600"
+                  />
+                  <span className="text-sm text-slate-700">{fmt}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={reportModalOpen}
+        onClose={() => {
+          setReportModalOpen(false);
+          setSelectedReportRelease(null);
+        }}
+        title="鉴定报告"
+        width="max-w-lg"
+        footer={
+          <button
+            className="btn-secondary"
+            onClick={() => {
+              setReportModalOpen(false);
+              setSelectedReportRelease(null);
+            }}
+          >
+            关闭
+          </button>
+        }
+      >
+        {selectedReportRelease && (
+          <div className="space-y-4">
+            <div className="text-center pb-4 border-b border-slate-100">
+              <h4 className="text-lg font-bold text-slate-800">出所鉴定报告</h4>
+              <p className="text-xs text-slate-400 mt-1">
+                报告编号：JD-{selectedReportRelease.id.slice(0, 8).toUpperCase()}
+              </p>
+            </div>
+            <div className="space-y-3 text-sm">
+              <div className="flex">
+                <span className="text-slate-500 w-28 flex-shrink-0">被鉴定人：</span>
+                <span className="text-slate-800 font-medium">
+                  {selectedReportRelease.detaineeName}
+                </span>
+              </div>
+              <div className="flex">
+                <span className="text-slate-500 w-28 flex-shrink-0">鉴定日期：</span>
+                <span className="text-slate-700">{selectedReportRelease.releaseDate}</span>
+              </div>
+              <div className="flex">
+                <span className="text-slate-500 w-28 flex-shrink-0">鉴定结果：</span>
+                <span className="text-slate-700">
+                  {selectedReportRelease.assessmentResult || "戒治效果良好，符合出所条件"}
+                </span>
+              </div>
+              <div className="flex">
+                <span className="text-slate-500 w-28 flex-shrink-0">风险评估：</span>
+                <StatusBadge
+                  type={
+                    selectedReportRelease.status === "已解除"
+                      ? "success"
+                      : selectedReportRelease.status === "已批准"
+                      ? "info"
+                      : "warning"
+                  }
+                >
+                  {selectedReportRelease.status === "已解除"
+                    ? "低风险"
+                    : selectedReportRelease.status === "已批准"
+                    ? "中低风险"
+                    : "待评估"}
+                </StatusBadge>
+              </div>
+            </div>
+            <div className="pt-4 border-t border-slate-100">
+              <h5 className="text-sm font-medium text-slate-700 mb-2">鉴定总结</h5>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                经综合评估，{selectedReportRelease.detaineeName}
+                在强制隔离戒毒期间表现良好，生理脱毒效果显著，心理状态稳定。
+                {selectedReportRelease.assessmentResult
+                  ? `出所鉴定结论：${selectedReportRelease.assessmentResult}。`
+                  : "出所鉴定结论：符合解除强制隔离戒毒条件。"}
+                建议按期办理解除手续，并做好后续社区照管衔接工作。
+              </p>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={documentModalOpen}
+        onClose={() => {
+          setDocumentModalOpen(false);
+          setSelectedDocRelease(null);
+        }}
+        title="办理文书"
+        width="max-w-md"
+        footer={
+          <>
+            <button
+              className="btn-secondary"
+              onClick={() => {
+                setDocumentModalOpen(false);
+                setSelectedDocRelease(null);
+              }}
+            >
+              取消
+            </button>
+            <button
+              className="btn-primary"
+              onClick={() => {
+                alert("文书已生成，可前往文书管理查看");
+                setDocumentModalOpen(false);
+                setSelectedDocRelease(null);
+              }}
+            >
+              <FileText className="w-4 h-4" />
+              生成文书
+            </button>
+          </>
+        }
+      >
+        {selectedDocRelease && (
+          <div className="space-y-5">
+            <div className="space-y-2 text-sm">
+              <div className="flex">
+                <span className="text-slate-500 w-20 flex-shrink-0">人员：</span>
+                <span className="text-slate-800 font-medium">
+                  {selectedDocRelease.detaineeName}
+                </span>
+              </div>
+              <div className="flex">
+                <span className="text-slate-500 w-20 flex-shrink-0">状态：</span>
+                <StatusBadge
+                  type={
+                    selectedDocRelease.status === "已解除"
+                      ? "success"
+                      : selectedDocRelease.status === "已批准"
+                      ? "blue"
+                      : "warning"
+                  }
+                >
+                  {selectedDocRelease.status}
+                </StatusBadge>
+              </div>
+            </div>
+            <div>
+              <label className="form-label">文书类型</label>
+              <div className="space-y-2">
+                {[
+                  "解除强制隔离戒毒决定书",
+                  "出所鉴定书",
+                  "社区衔接通知书",
+                ].map((doc) => (
+                  <label
+                    key={doc}
+                    className="flex items-center gap-2 cursor-pointer"
+                  >
+                    <input
+                      type="radio"
+                      name="documentType"
+                      checked={documentType === doc}
+                      onChange={() => setDocumentType(doc)}
+                      className="accent-police-600"
+                    />
+                    <span className="text-sm text-slate-700">{doc}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </Modal>
     </PageContainer>
   );

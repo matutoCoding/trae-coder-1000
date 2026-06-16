@@ -204,111 +204,173 @@ export default function Psychological() {
     { key: "conclusion", title: "评估结论" },
   ];
 
-  const moodTrendOption = {
-    tooltip: { trigger: "axis" },
-    legend: { data: ["积极", "稳定", "焦虑", "抑郁"], top: 0 },
-    grid: { left: 40, right: 20, top: 40, bottom: 30 },
-    xAxis: {
-      type: "category",
-      data: ["第1周", "第2周", "第3周", "第4周", "第5周", "第6周"],
-      axisLine: { lineStyle: { color: "#cbd5e1" } },
-    },
-    yAxis: {
-      type: "value",
-      axisLine: { show: false },
-      splitLine: { lineStyle: { color: "#f1f5f9" } },
-    },
-    series: [
-      {
-        name: "积极",
-        type: "line",
-        smooth: true,
-        stack: "total",
-        areaStyle: {},
-        data: [3, 5, 8, 10, 12, 15],
-        itemStyle: { color: "#065f46" },
+  const moodTrendOption = useMemo(() => {
+    const moods = ["积极", "稳定", "焦虑", "抑郁", "愤怒"] as const;
+    const moodColors: Record<string, string> = {
+      积极: "#065f46",
+      稳定: "#1e40af",
+      焦虑: "#d97706",
+      抑郁: "#64748b",
+      愤怒: "#dc2626",
+    };
+    const base = {
+      tooltip: { trigger: "axis" },
+      legend: { data: [...moods], top: 0 },
+      grid: { left: 40, right: 20, top: 40, bottom: 30 },
+      yAxis: {
+        type: "value",
+        axisLine: { show: false },
+        splitLine: { lineStyle: { color: "#f1f5f9" } },
       },
-      {
-        name: "稳定",
+    };
+    if (counselings.length === 0) {
+      return {
+        ...base,
+        xAxis: {
+          type: "category",
+          data: [],
+          axisLine: { lineStyle: { color: "#cbd5e1" } },
+        },
+        series: moods.map((m) => ({
+          name: m,
+          type: "line",
+          smooth: true,
+          stack: "total",
+          areaStyle: {},
+          data: [],
+          itemStyle: { color: moodColors[m] },
+        })),
+      };
+    }
+    const sorted = [...counselings].sort((a, b) => a.date.localeCompare(b.date));
+    const startMs = new Date(sorted[0].date).getTime();
+    const weekMs = 7 * 24 * 60 * 60 * 1000;
+    const weekMap = new Map<string, Record<string, number>>();
+    const weekLabels: string[] = [];
+    for (const c of sorted) {
+      const weekIdx = Math.floor((new Date(c.date).getTime() - startMs) / weekMs);
+      const key = `第${weekIdx + 1}周`;
+      if (!weekMap.has(key)) {
+        weekMap.set(key, { 积极: 0, 稳定: 0, 焦虑: 0, 抑郁: 0, 愤怒: 0 });
+        weekLabels.push(key);
+      }
+      weekMap.get(key)![c.mood]++;
+    }
+    return {
+      ...base,
+      xAxis: {
+        type: "category",
+        data: weekLabels,
+        axisLine: { lineStyle: { color: "#cbd5e1" } },
+      },
+      series: moods.map((m) => ({
+        name: m,
         type: "line",
         smooth: true,
         stack: "total",
         areaStyle: {},
-        data: [10, 12, 14, 16, 18, 20],
+        data: weekLabels.map((w) => weekMap.get(w)![m]),
+        itemStyle: { color: moodColors[m] },
+      })),
+    };
+  }, [counselings]);
+
+  const radarOption = useMemo(() => {
+    const dimensions = ["焦虑", "抑郁", "敌对", "人际敏感", "强迫", "偏执"];
+    const dimensionFactors = [1.0, 0.95, 0.65, 0.75, 1.1, 0.7];
+    const toDimensionValues = (score: number) =>
+      dimensionFactors.map((f) => Math.min(100, Math.round(score * f)));
+    const indicator = dimensions.map((d) => ({ name: d, max: 100 }));
+    const baseRadar = {
+      tooltip: {},
+      radar: {
+        indicator,
+        radius: "65%" as const,
+        axisName: { color: "#64748b", fontSize: 12 },
+        splitArea: { areaStyle: { color: ["#f8fafc", "#f1f5f9"] } },
+      },
+    };
+    if (psychAssessments.length === 0) {
+      return {
+        ...baseRadar,
+        series: [{ type: "radar", data: [] }],
+        legend: { data: [], bottom: 0 },
+      };
+    }
+    const sorted = [...psychAssessments].sort((a, b) => a.date.localeCompare(b.date));
+    const latest = sorted[sorted.length - 1];
+    const earliest = sorted[0];
+    const seriesData: Array<{
+      value: number[];
+      name: string;
+      itemStyle: { color: string };
+      areaStyle: { color: string };
+      lineStyle: { color: string; width: number; type?: string };
+    }> = [
+      {
+        value: toDimensionValues(latest.score),
+        name: "当前评估",
         itemStyle: { color: "#1e40af" },
+        areaStyle: { color: "rgba(30, 64, 175, 0.2)" },
+        lineStyle: { color: "#1e40af", width: 2 },
       },
-      {
-        name: "焦虑",
-        type: "line",
-        smooth: true,
-        stack: "total",
-        areaStyle: {},
-        data: [8, 6, 5, 4, 3, 2],
-        itemStyle: { color: "#d97706" },
-      },
-      {
-        name: "抑郁",
-        type: "line",
-        smooth: true,
-        stack: "total",
-        areaStyle: {},
-        data: [5, 4, 3, 2, 2, 1],
-        itemStyle: { color: "#64748b" },
-      },
-    ],
-  };
+    ];
+    const legendData = ["当前评估"];
+    if (sorted.length > 1) {
+      seriesData.push({
+        value: toDimensionValues(earliest.score),
+        name: "入所评估",
+        itemStyle: { color: "#94a3b8" },
+        areaStyle: { color: "rgba(148, 163, 184, 0.1)" },
+        lineStyle: { color: "#94a3b8", width: 2, type: "dashed" },
+      });
+      legendData.push("入所评估");
+    }
+    return {
+      ...baseRadar,
+      series: [{ type: "radar", data: seriesData }],
+      legend: { data: legendData, bottom: 0 },
+    };
+  }, [psychAssessments]);
 
-  const radarOption = {
-    tooltip: {},
-    radar: {
-      indicator: [
-        { name: "焦虑", max: 100 },
-        { name: "抑郁", max: 100 },
-        { name: "敌对", max: 100 },
-        { name: "人际敏感", max: 100 },
-        { name: "强迫", max: 100 },
-        { name: "偏执", max: 100 },
-      ],
-      radius: "65%",
-      axisName: { color: "#64748b", fontSize: 12 },
-      splitArea: {
-        areaStyle: { color: ["#f8fafc", "#f1f5f9"] },
-      },
-    },
-    series: [
-      {
-        type: "radar",
-        data: [
-          {
-            value: [42, 38, 25, 30, 55, 28],
-            name: "当前评估",
-            itemStyle: { color: "#1e40af" },
-            areaStyle: { color: "rgba(30, 64, 175, 0.2)" },
-            lineStyle: { color: "#1e40af", width: 2 },
-          },
-          {
-            value: [65, 58, 45, 52, 72, 48],
-            name: "入所评估",
-            itemStyle: { color: "#94a3b8" },
-            areaStyle: { color: "rgba(148, 163, 184, 0.1)" },
-            lineStyle: { color: "#94a3b8", width: 2, type: "dashed" },
-          },
-        ],
-      },
-    ],
-    legend: { data: ["当前评估", "入所评估"], bottom: 0 },
-  };
+  const topicTags = useMemo(() => {
+    const colorPalette = [
+      "bg-police-100 text-police-700",
+      "bg-warning-100 text-warning-700",
+      "bg-amber-100 text-amber-700",
+      "bg-health-100 text-health-700",
+      "bg-purple-100 text-purple-700",
+      "bg-sky-100 text-sky-700",
+      "bg-indigo-100 text-indigo-700",
+      "bg-slate-100 text-slate-700",
+    ];
+    const topicCounts = new Map<string, number>();
+    for (const c of counselings) {
+      if (c.topic) {
+        topicCounts.set(c.topic, (topicCounts.get(c.topic) || 0) + 1);
+      }
+    }
+    return Array.from(topicCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count], i) => ({
+        name,
+        count,
+        color: colorPalette[i % colorPalette.length],
+      }));
+  }, [counselings]);
 
-  const topicTags = [
-    { name: "家庭关系", count: 18, color: "bg-police-100 text-police-700" },
-    { name: "心理依赖", count: 25, color: "bg-warning-100 text-warning-700" },
-    { name: "焦虑情绪", count: 22, color: "bg-amber-100 text-amber-700" },
-    { name: "未来规划", count: 12, color: "bg-health-100 text-health-700" },
-    { name: "人际沟通", count: 15, color: "bg-purple-100 text-purple-700" },
-    { name: "自我认知", count: 10, color: "bg-sky-100 text-sky-700" },
-    { name: "睡眠问题", count: 8, color: "bg-indigo-100 text-indigo-700" },
-    { name: "抑郁情绪", count: 14, color: "bg-slate-100 text-slate-700" },
-  ];
+  const counselingDayCounts = useMemo(() => {
+    const now = new Date();
+    const prefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const counts = new Map<number, number>();
+    for (const c of counselings) {
+      if (c.date.startsWith(prefix)) {
+        const day = new Date(c.date).getDate();
+        counts.set(day, (counts.get(day) || 0) + 1);
+      }
+    }
+    return counts;
+  }, [counselings]);
 
   return (
     <PageContainer
@@ -399,10 +461,9 @@ export default function Psychological() {
                   </div>
                 ))}
                 {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => {
-                  const hasAppointment = [3, 5, 8, 10, 12, 15, 17, 19, 22, 24, 26].includes(
-                    day
-                  );
-                  const isToday = day === 16;
+                  const hasAppointment = counselingDayCounts.has(day);
+                  const isMultiple = (counselingDayCounts.get(day) || 0) > 1;
+                  const isToday = day === new Date().getDate();
                   return (
                     <div
                       key={day}
@@ -422,7 +483,7 @@ export default function Psychological() {
                       {hasAppointment && !isToday && (
                         <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-0.5">
                           <span className="w-1 h-1 rounded-full bg-police-500" />
-                          {[10, 15, 22].includes(day) && (
+                          {isMultiple && (
                             <span className="w-1 h-1 rounded-full bg-warning-500" />
                           )}
                         </div>

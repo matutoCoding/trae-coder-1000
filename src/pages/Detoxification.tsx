@@ -31,6 +31,7 @@ export default function Detoxification() {
   const [activeTab, setActiveTab] = useState("treatment");
   const [treatmentModalOpen, setTreatmentModalOpen] = useState(false);
   const [urineModalOpen, setUrineModalOpen] = useState(false);
+  const [planModalOpen, setPlanModalOpen] = useState(false);
 
   const { detainees, treatments, urineTests, addTreatment, addUrineTest } = useAppStore();
 
@@ -95,43 +96,80 @@ export default function Detoxification() {
     [urineTests]
   );
 
-  const vitalSignsOption = {
-    tooltip: { trigger: "axis" },
-    legend: { data: ["体温(℃)", "心率(次/分)", "血压(mmHg)"], top: 0 },
-    grid: { left: 40, right: 20, top: 40, bottom: 30 },
-    xAxis: {
-      type: "category",
-      data: ["第1天", "第3天", "第7天", "第10天", "第14天", "第21天"],
-      axisLine: { lineStyle: { color: "#cbd5e1" } },
-    },
-    yAxis: {
-      type: "value",
-      axisLine: { show: false },
-      splitLine: { lineStyle: { color: "#f1f5f9" } },
-    },
-    series: [
+  const vitalSignsOption = useMemo(() => {
+    const sorted = [...treatments]
+      .filter((t) => t.vitalSigns)
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    if (sorted.length === 0) {
+      return {
+        title: { text: "暂无数据", left: "center", top: "center", textStyle: { color: "#94a3b8", fontSize: 14 } },
+        xAxis: { type: "category", data: [] },
+        yAxis: { type: "value" },
+        series: [],
+      };
+    }
+
+    const dates = sorted.map((t) => t.date.slice(5));
+
+    const extractNum = (text: string, keyword: string): number | null => {
+      const match = text.match(new RegExp(keyword + `[^.0-9]*(\\d+(?:\\.\\d+)?)`));
+      return match ? parseFloat(match[1]) : null;
+    };
+
+    const temps = sorted.map((t) => {
+      const v = extractNum(t.vitalSigns, "体温");
+      return v !== null && v >= 35 && v <= 42 ? v : null;
+    });
+    const heartRates = sorted.map((t) => {
+      const v = extractNum(t.vitalSigns, "心率");
+      return v !== null && v >= 40 && v <= 200 ? v : null;
+    });
+    const bloodPressures = sorted.map((t) => {
+      const match = t.vitalSigns.match(/血压[^.0-9]*(\d+)/);
+      const v = match ? parseInt(match[1]) : null;
+      return v !== null && v >= 60 && v <= 250 ? v : null;
+    });
+
+    const series: Array<{
+      name: string; type: string; smooth: boolean; data: (number | null)[];
+      itemStyle: { color: string }; lineStyle: { color: string; width: number };
+      symbol: string; symbolSize: number; connectNulls: boolean;
+    }> = [
       {
-        name: "体温(℃)",
-        type: "line",
-        smooth: true,
-        data: [37.2, 36.9, 36.7, 36.6, 36.5, 36.5],
-        itemStyle: { color: "#dc2626" },
-        lineStyle: { color: "#dc2626", width: 2 },
-        symbol: "circle",
-        symbolSize: 6,
+        name: "体温(℃)", type: "line", smooth: true, data: temps,
+        itemStyle: { color: "#dc2626" }, lineStyle: { color: "#dc2626", width: 2 },
+        symbol: "circle", symbolSize: 6, connectNulls: true,
       },
       {
-        name: "心率(次/分)",
-        type: "line",
-        smooth: true,
-        data: [92, 88, 82, 79, 76, 75],
-        itemStyle: { color: "#1e40af" },
-        lineStyle: { color: "#1e40af", width: 2 },
-        symbol: "circle",
-        symbolSize: 6,
+        name: "心率(次/分)", type: "line", smooth: true, data: heartRates,
+        itemStyle: { color: "#1e40af" }, lineStyle: { color: "#1e40af", width: 2 },
+        symbol: "circle", symbolSize: 6, connectNulls: true,
       },
-    ],
-  };
+      {
+        name: "血压(mmHg)", type: "line", smooth: true, data: bloodPressures,
+        itemStyle: { color: "#7c3aed" }, lineStyle: { color: "#7c3aed", width: 2 },
+        symbol: "circle", symbolSize: 6, connectNulls: true,
+      },
+    ];
+
+    return {
+      tooltip: { trigger: "axis" },
+      legend: { data: series.map((s) => s.name), top: 0 },
+      grid: { left: 40, right: 20, top: 40, bottom: 30 },
+      xAxis: {
+        type: "category",
+        data: dates,
+        axisLine: { lineStyle: { color: "#cbd5e1" } },
+      },
+      yAxis: {
+        type: "value",
+        axisLine: { show: false },
+        splitLine: { lineStyle: { color: "#f1f5f9" } },
+      },
+      series,
+    };
+  }, [treatments]);
 
   const handleAddTreatment = () => {
     if (!treatmentForm.detaineeId || !treatmentForm.medication) return;
@@ -254,7 +292,7 @@ export default function Detoxification() {
       breadcrumbs={[{ label: "生理脱毒" }]}
       actions={
         <div className="flex gap-3">
-          <button className="btn-secondary">
+          <button className="btn-secondary" onClick={() => setPlanModalOpen(true)}>
             <CalendarDays className="w-4 h-4" />
             生成检测计划
           </button>
@@ -411,8 +449,12 @@ export default function Detoxification() {
                   </div>
                 ))}
                 {Array.from({ length: 30 }, (_, i) => i + 1).map((day) => {
-                  const hasTest = [5, 8, 12, 15, 19, 22, 26].includes(day);
-                  const isPositive = [15, 26].includes(day);
+                  const dayStr = String(day).padStart(2, "0");
+                  const testsOnDay = urineTests.filter(
+                    (u) => u.testDate.slice(8) === dayStr
+                  );
+                  const hasTest = testsOnDay.length > 0;
+                  const isPositive = testsOnDay.some((u) => u.result === "阳性");
                   return (
                     <div
                       key={day}
@@ -756,6 +798,77 @@ export default function Detoxification() {
             />
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        isOpen={planModalOpen}
+        onClose={() => setPlanModalOpen(false)}
+        title="检测计划"
+        width="max-w-lg"
+        footer={
+          <button
+            className="btn-primary"
+            onClick={() => setPlanModalOpen(false)}
+          >
+            <Check className="w-4 h-4" />
+            确定
+          </button>
+        }
+      >
+        {(() => {
+          const now = new Date();
+          const year = now.getFullYear();
+          const month = now.getMonth();
+          const daysInMonth = new Date(year, month + 1, 0).getDate();
+          const scheduledDays = [5, 10, 15, 20, 25].filter(
+            (d) => d <= daysInMonth
+          );
+          const existingDays = new Set(
+            urineTests
+              .filter((u) => {
+                const d = new Date(u.testDate);
+                return d.getFullYear() === year && d.getMonth() === month;
+              })
+              .map((u) => new Date(u.testDate).getDate())
+          );
+          return (
+            <div className="space-y-4">
+              <div className="text-sm text-slate-600">
+                {year}年{month + 1}月尿检筛查计划
+              </div>
+              <div className="space-y-2">
+                {scheduledDays.map((day) => {
+                  const done = existingDays.has(day);
+                  return (
+                    <div
+                      key={day}
+                      className="flex items-center justify-between p-3 rounded-sm border border-slate-200"
+                    >
+                      <div className="flex items-center gap-3">
+                        <CalendarDays className="w-4 h-4 text-police-600" />
+                        <span className="text-sm font-medium">
+                          {month + 1}月{day}日
+                        </span>
+                      </div>
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded-full ${
+                          done
+                            ? "bg-health-50 text-health-700"
+                            : "bg-slate-100 text-slate-500"
+                        }`}
+                      >
+                        {done ? "已检测" : "待检测"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="text-xs text-slate-400 pt-2 border-t border-slate-100">
+                共 {scheduledDays.length} 次计划检测，已完成 {scheduledDays.filter((d) => existingDays.has(d)).length} 次
+              </div>
+            </div>
+          );
+        })()}
       </Modal>
     </PageContainer>
   );

@@ -61,6 +61,7 @@ interface StoreState {
   addLevelChange: (change: Omit<LevelChange, "id">) => void;
   addViolation: (violation: Omit<Violation, "id">) => void;
   updateViolationStatus: (id: string, status: Violation["status"]) => void;
+  updateViolationPunishment: (id: string, punishment: string) => void;
   addVisit: (visit: Omit<Visit, "id">) => void;
   updateVisitStatus: (id: string, status: Visit["status"]) => void;
 
@@ -168,6 +169,13 @@ export const useAppStore = create<StoreState>()(
         set((state) => ({
           violations: state.violations.map((v) =>
             v.id === id ? { ...v, status } : v
+          ),
+        })),
+
+      updateViolationPunishment: (id, punishment) =>
+        set((state) => ({
+          violations: state.violations.map((v) =>
+            v.id === id ? { ...v, punishment } : v
           ),
         })),
 
