@@ -19,6 +19,7 @@ import DataTable from "@/components/DataTable";
 import type { Column } from "@/components/DataTable";
 import StatusBadge from "@/components/StatusBadge";
 import Modal from "@/components/Modal";
+import PersonProfileModal from "@/components/PersonProfileModal";
 import { useAppStore } from "@/store/useAppStore";
 import type { TrainingRecord } from "@/types";
 
@@ -32,6 +33,8 @@ export default function Rehabilitation() {
   const [trainingModalOpen, setTrainingModalOpen] = useState(false);
   const [assessmentModalOpen, setAssessmentModalOpen] = useState(false);
   const [courseDetailModalOpen, setCourseDetailModalOpen] = useState(false);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [profileDetaineeId, setProfileDetaineeId] = useState("");
   const [selectedCourse, setSelectedCourse] = useState<{
     id: number;
     name: string;
@@ -140,6 +143,25 @@ export default function Rehabilitation() {
       ),
     },
     { key: "coach", title: "教练", width: "100px" },
+    {
+      key: "actions",
+      title: "操作",
+      width: "100px",
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setProfileDetaineeId(row.detaineeId);
+              setProfileModalOpen(true);
+            }}
+            className="text-xs text-police-600 hover:text-police-700 flex items-center gap-1"
+          >
+            <User className="w-3.5 h-3.5" />
+            画像
+          </button>
+        </div>
+      ),
+    },
   ];
 
   const skillColumns: Column<TrainingRecord>[] = [
@@ -183,6 +205,25 @@ export default function Rehabilitation() {
       ),
     },
     { key: "coach", title: "授课老师", width: "100px" },
+    {
+      key: "actions",
+      title: "操作",
+      width: "100px",
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setProfileDetaineeId(row.detaineeId);
+              setProfileModalOpen(true);
+            }}
+            className="text-xs text-police-600 hover:text-police-700 flex items-center gap-1"
+          >
+            <User className="w-3.5 h-3.5" />
+            画像
+          </button>
+        </div>
+      ),
+    },
   ];
 
   const performanceTrendOption = useMemo(() => {
@@ -962,6 +1003,15 @@ export default function Rehabilitation() {
           </div>
         )}
       </Modal>
+
+      <PersonProfileModal
+        isOpen={profileModalOpen}
+        onClose={() => {
+          setProfileModalOpen(false);
+          setProfileDetaineeId("");
+        }}
+        detaineeId={profileDetaineeId}
+      />
     </PageContainer>
   );
 }

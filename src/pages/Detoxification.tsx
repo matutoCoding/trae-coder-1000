@@ -12,6 +12,10 @@ import {
   TrendingUp,
   X,
   Check,
+  ChevronDown,
+  FileText,
+  AlertCircle,
+  Heart,
 } from "lucide-react";
 import PageContainer from "@/components/PageContainer";
 import StatCard from "@/components/StatCard";
@@ -34,6 +38,8 @@ export default function Detoxification() {
   const [planModalOpen, setPlanModalOpen] = useState(false);
 
   const { detainees, treatments, urineTests, addTreatment, addUrineTest } = useAppStore();
+
+  const [selectedProfileId, setSelectedProfileId] = useState<string>("");
 
   const [treatmentForm, setTreatmentForm] = useState({
     detaineeId: "",
@@ -170,6 +176,124 @@ export default function Detoxification() {
       series,
     };
   }, [treatments]);
+
+  const extractVitalSigns = (text: string) => {
+    const extractNum = (keyword: string): number | null => {
+      const match = text.match(new RegExp(keyword + `[^.0-9]*(\\d+(?:\\.\\d+)?)`));
+      return match ? parseFloat(match[1]) : null;
+    };
+    const temp = extractNum("体温");
+    let heartRate = extractNum("心率");
+    if (heartRate === null) heartRate = extractNum("脉搏");
+    const bpMatch = text.match(/血压[^.0-9]*(\d+)/);
+    const bloodPressure = bpMatch ? parseInt(bpMatch[1]) : null;
+    return {
+      temp: temp !== null && temp >= 35 && temp <= 42 ? temp : null,
+      heartRate: heartRate !== null && heartRate >= 40 && heartRate <= 200 ? heartRate : null,
+      bloodPressure: bloodPressure !== null && bloodPressure >= 60 && bloodPressure <= 250 ? bloodPressure : null,
+    };
+  };
+
+  const selectedProfile = useMemo(
+    () => detainees.find((d) => d.id === selectedProfileId) || null,
+    [detainees, selectedProfileId]
+  );
+
+  const profileTreatments = useMemo(
+    () =>
+      treatments
+        .filter((t) => t.detaineeId === selectedProfileId)
+        .sort((a, b) => a.date.localeCompare(b.date)),
+    [treatments, selectedProfileId]
+  );
+
+  const profileUrineTests = useMemo(
+    () =>
+      urineTests
+        .filter((u) => u.detaineeId === selectedProfileId)
+        .sort((a, b) => a.testDate.localeCompare(b.testDate)),
+    [urineTests, selectedProfileId]
+  );
+
+  const profileVitalOption = useMemo(() => {
+    if (profileTreatments.length === 0) {
+      return {
+        title: {
+          text: "暂无体征数据",
+          left: "center",
+          top: "center",
+          textStyle: { color: "#94a3b8", fontSize: 13 },
+        },
+        xAxis: { type: "category", data: [] },
+        yAxis: { type: "value" },
+        series: [],
+      };
+    }
+    const dates = profileTreatments.map((t) => t.date.slice(5));
+    const temps: (number | null)[] = [];
+    const heartRates: (number | null)[] = [];
+    const bps: (number | null)[] = [];
+    profileTreatments.forEach((t) => {
+      const vs = extractVitalSigns(t.vitalSigns);
+      temps.push(vs.temp);
+      heartRates.push(vs.heartRate);
+      bps.push(vs.bloodPressure);
+    });
+    return {
+      tooltip: { trigger: "axis" },
+      legend: { data: ["体温", "心率", "血压"], top: 0, textStyle: { fontSize: 11 } },
+      grid: { left: 40, right: 20, top: 35, bottom: 25 },
+      xAxis: { type: "category", data: dates, axisLine: { lineStyle: { color: "#cbd5e1" } }, axisLabel: { fontSize: 10 } },
+      yAxis: { type: "value", axisLine: { show: false }, splitLine: { lineStyle: { color: "#f1f5f9" } } },
+      series: [
+        { name: "体温", type: "line", smooth: true, data: temps, itemStyle: { color: "#dc2626" }, lineStyle: { width: 2 }, connectNulls: true, symbol: "circle", symbolSize: 6 },
+        { name: "心率", type: "line", smooth: true, data: heartRates, itemStyle: { color: "#1e40af" }, lineStyle: { width: 2 }, connectNulls: true, symbol: "circle", symbolSize: 6 },
+        { name: "血压", type: "line", smooth: true, data: bps, itemStyle: { color: "#7c3aed" }, lineStyle: { width: 2 }, connectNulls: true, symbol: "circle", symbolSize: 6 },
+      ],
+    };
+  }, [profileTreatments]);
+
+  const profileAbnormalAlerts = useMemo(() => {
+    const alerts: Array<{ date: string; type: string; level: "warning" | "danger"; desc: string }> = [];
+    profileTreatments.forEach((t) => {
+      const vs = extractVitalSigns(t.vitalSigns);
+      if (vs.temp !== null && (vs.temp > 37.3 || vs.temp < 36)) {
+        alerts.push({
+          date: t.date,
+          type: "体温异常",
+          level: vs.temp > 37.3 ? "danger" : "warning",
+          desc: `体温 ${vs.temp}℃，${vs.temp > 37.3 ? "偏高" : "偏低"}，需关注`,
+        });
+      }
+      if (vs.heartRate !== null && (vs.heartRate > 100 || vs.heartRate < 60)) {
+        alerts.push({
+          date: t.date,
+          type: "心率异常",
+          level: vs.heartRate > 100 ? "warning" : "warning",
+          desc: `心率 ${vs.heartRate}次/分，${vs.heartRate > 100 ? "偏快" : "偏慢"}`,
+        });
+      }
+      if (vs.bloodPressure !== null && (vs.bloodPressure > 140 || vs.bloodPressure < 90)) {
+        alerts.push({
+          date: t.date,
+          type: "血压异常",
+          level: vs.bloodPressure > 140 ? "danger" : "warning",
+          desc: `收缩压 ${vs.bloodPressure}mmHg，${vs.bloodPressure > 140 ? "偏高" : "偏低"}`,
+        });
+      }
+    });
+    profileUrineTests.forEach((u) => {
+      if (u.result === "阳性") {
+        alerts.push({
+          date: u.testDate,
+          type: "尿检阳性",
+          level: "danger",
+          desc: `${u.testType}结果阳性，需重点关注`,
+        });
+      }
+    });
+    return alerts.sort((a, b) => b.date.localeCompare(a.date));
+  }, [profileTreatments, profileUrineTests]);
 
   const handleAddTreatment = () => {
     if (!treatmentForm.detaineeId || !treatmentForm.medication) return;
@@ -378,37 +502,210 @@ export default function Detoxification() {
                   <span>共有 {treatments.length} 条治疗记录</span>
                 </div>
               </div>
+
+              <div className="mb-4 flex items-center gap-3">
+                <div className="relative flex-1 max-w-xs">
+                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <select
+                    className="form-input pl-9 appearance-none"
+                    value={selectedProfileId}
+                    onChange={(e) => setSelectedProfileId(e.target.value)}
+                  >
+                    <option value="">选择人员查看治疗档案</option>
+                    {detainees.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name} - {d.idCard.slice(-4)}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+                {selectedProfileId && (
+                  <button
+                    className="text-xs text-slate-500 hover:text-slate-700"
+                    onClick={() => setSelectedProfileId("")}
+                  >
+                    清除选择
+                  </button>
+                )}
+              </div>
+
               <DataTable columns={treatmentColumns} data={treatments} rowKey="id" />
             </div>
           </div>
 
           <div className="space-y-6">
-            <div className="card">
-              <h3 className="section-title">体征监测趋势</h3>
-              <ReactECharts option={vitalSignsOption} style={{ height: 280 }} />
-            </div>
-
-            <div className="card">
-              <h3 className="section-title">治疗进度</h3>
-              <div className="space-y-4">
-                {treatments.slice(0, 3).map((t) => (
-                  <div key={t.id}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium text-slate-700">
-                        {t.detaineeName}
-                      </span>
-                      <span className="text-xs text-slate-500">{t.progress}%</span>
+            {selectedProfile ? (
+              <>
+                <div className="card bg-gradient-to-br from-police-50 to-blue-50 border-0">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-police-500 to-police-700 flex items-center justify-center">
+                      <User className="w-6 h-6 text-white" />
                     </div>
-                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-health-500 to-health-700 rounded-full transition-all"
-                        style={{ width: `${t.progress}%` }}
-                      />
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-slate-800">
+                        {selectedProfile.name}
+                      </h4>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-xs text-slate-500">
+                          {selectedProfile.gender} · {selectedProfile.currentLevel}
+                        </span>
+                        <StatusBadge
+                          type={
+                            selectedProfile.status === "正常"
+                              ? "success"
+                              : selectedProfile.status === "治疗中"
+                              ? "blue"
+                              : "warning"
+                          }
+                        >
+                          {selectedProfile.status}
+                        </StatusBadge>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-bold text-police-700">
+                        {profileTreatments.length}
+                      </p>
+                      <p className="text-xs text-slate-500">治疗记录</p>
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
+                </div>
+
+                <div className="card">
+                  <h3 className="section-title">体征曲线</h3>
+                  <ReactECharts option={profileVitalOption} style={{ height: 220 }} />
+                </div>
+
+                <div className="card">
+                  <h3 className="section-title">尿检记录</h3>
+                  {profileUrineTests.length > 0 ? (
+                    <div className="space-y-2">
+                      {profileUrineTests.slice(0, 5).map((u) => (
+                        <div
+                          key={u.id}
+                          className="flex items-center justify-between p-2.5 bg-slate-50 rounded-sm"
+                        >
+                          <div className="flex items-center gap-2">
+                            <div
+                              className={`w-2 h-2 rounded-full ${
+                                u.result === "阴性"
+                                  ? "bg-health-500"
+                                  : "bg-warning-500"
+                              }`}
+                            />
+                            <span className="text-sm text-slate-700">
+                              {u.testType}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-slate-500">
+                              {u.testDate}
+                            </span>
+                            <StatusBadge
+                              type={u.result === "阴性" ? "success" : "danger"}
+                            >
+                              {u.result}
+                            </StatusBadge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 text-slate-400 text-sm">
+                      暂无尿检记录
+                    </div>
+                  )}
+                </div>
+
+                <div className="card">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="section-title mb-0">异常提醒</h3>
+                    {profileAbnormalAlerts.length > 0 && (
+                      <span className="text-xs text-warning-600 font-medium">
+                        {profileAbnormalAlerts.length} 条异常
+                      </span>
+                    )}
+                  </div>
+                  {profileAbnormalAlerts.length > 0 ? (
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {profileAbnormalAlerts.map((alert, idx) => (
+                        <div
+                          key={idx}
+                          className={`p-2.5 rounded-sm flex items-start gap-2 ${
+                            alert.level === "danger"
+                              ? "bg-red-50 border border-red-100"
+                              : "bg-amber-50 border border-amber-100"
+                          }`}
+                        >
+                          {alert.level === "danger" ? (
+                            <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                          ) : (
+                            <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p
+                              className={`text-xs font-medium ${
+                                alert.level === "danger"
+                                  ? "text-red-700"
+                                  : "text-amber-700"
+                              }`}
+                            >
+                              {alert.date} · {alert.type}
+                            </p>
+                            <p
+                              className={`text-xs mt-0.5 ${
+                                alert.level === "danger"
+                                  ? "text-red-600"
+                                  : "text-amber-600"
+                              }`}
+                            >
+                              {alert.desc}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-6">
+                      <Heart className="w-8 h-8 text-health-400 mx-auto mb-2" />
+                      <p className="text-sm text-health-600">体征状态良好</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="card">
+                  <h3 className="section-title">体征监测趋势</h3>
+                  <ReactECharts option={vitalSignsOption} style={{ height: 280 }} />
+                </div>
+
+                <div className="card">
+                  <h3 className="section-title">治疗进度</h3>
+                  <div className="space-y-4">
+                    {treatments.slice(0, 3).map((t) => (
+                      <div key={t.id}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-medium text-slate-700">
+                            {t.detaineeName}
+                          </span>
+                          <span className="text-xs text-slate-500">
+                            {t.progress}%
+                          </span>
+                        </div>
+                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-health-500 to-health-700 rounded-full transition-all"
+                            style={{ width: `${t.progress}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

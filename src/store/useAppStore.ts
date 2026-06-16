@@ -14,6 +14,7 @@ import type {
   Education,
   Release,
   AftercareRecord,
+  DocumentRecord,
 } from "../types";
 import {
   detainees as initialDetainees,
@@ -29,6 +30,7 @@ import {
   educations as initialEducations,
   releases as initialReleases,
   aftercareRecords as initialAftercareRecords,
+  documents as initialDocuments,
 } from "../data/mock";
 
 interface StoreState {
@@ -45,6 +47,14 @@ interface StoreState {
   educations: Education[];
   releases: Release[];
   aftercareRecords: AftercareRecord[];
+  documents: DocumentRecord[];
+
+  admissionFilters: {
+    level: string;
+    status: string;
+    gender: string;
+    search: string;
+  };
 
   addDetainee: (detainee: Omit<Detainee, "id">) => void;
   updateDetainee: (id: string, updates: Partial<Detainee>) => void;
@@ -70,6 +80,12 @@ interface StoreState {
   addRelease: (release: Omit<Release, "id">) => void;
   updateReleaseStatus: (id: string, status: Release["status"]) => void;
   addAftercareRecord: (record: Omit<AftercareRecord, "id">) => void;
+
+  addDocument: (doc: Omit<DocumentRecord, "id">) => void;
+  updateDocumentStatus: (id: string, status: DocumentRecord["status"]) => void;
+
+  setAdmissionFilters: (filters: Partial<StoreState["admissionFilters"]>) => void;
+  resetAdmissionFilters: () => void;
 }
 
 const generateId = (prefix: string) => {
@@ -94,6 +110,14 @@ export const useAppStore = create<StoreState>()(
       educations: initialEducations,
       releases: initialReleases,
       aftercareRecords: initialAftercareRecords,
+      documents: initialDocuments,
+
+      admissionFilters: {
+        level: "",
+        status: "",
+        gender: "",
+        search: "",
+      },
 
       addDetainee: (detainee) =>
         set((state) => ({
@@ -215,6 +239,33 @@ export const useAppStore = create<StoreState>()(
             ...state.aftercareRecords,
             { ...record, id: generateId("A") },
           ],
+        })),
+
+      addDocument: (doc) =>
+        set((state) => ({
+          documents: [...state.documents, { ...doc, id: generateId("DOC") }],
+        })),
+
+      updateDocumentStatus: (id, status) =>
+        set((state) => ({
+          documents: state.documents.map((d) =>
+            d.id === id ? { ...d, status } : d
+          ),
+        })),
+
+      setAdmissionFilters: (filters) =>
+        set((state) => ({
+          admissionFilters: { ...state.admissionFilters, ...filters },
+        })),
+
+      resetAdmissionFilters: () =>
+        set(() => ({
+          admissionFilters: {
+            level: "",
+            status: "",
+            gender: "",
+            search: "",
+          },
         })),
     }),
     {

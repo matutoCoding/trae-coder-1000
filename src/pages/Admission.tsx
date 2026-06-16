@@ -35,18 +35,37 @@ const tabs = [
 
 export default function Admission() {
   const [activeTab, setActiveTab] = useState("list");
-  const [searchText, setSearchText] = useState("");
   const [registerStep, setRegisterStep] = useState(1);
   const [showAdmitModal, setShowAdmitModal] = useState(false);
   const [selectedDetainee, setSelectedDetainee] = useState<string | null>(null);
   const [showCheckupModal, setShowCheckupModal] = useState(false);
   const [filterModalOpen, setFilterModalOpen] = useState(false);
-  const [filterLevel, setFilterLevel] = useState<string>("");
-  const [filterStatus, setFilterStatus] = useState<string>("");
-  const [filterGender, setFilterGender] = useState<string>("");
   const [printReportModalOpen, setPrintReportModalOpen] = useState(false);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [profileDetaineeId, setProfileDetaineeId] = useState<string>("");
 
-  const { detainees, healthCheckups, addDetainee, addHealthCheckup } = useAppStore();
+  const {
+    detainees,
+    healthCheckups,
+    treatments,
+    urineTests,
+    counselings,
+    psychAssessments,
+    trainingRecords,
+    violations,
+    levelChanges,
+    documents,
+    addDetainee,
+    addHealthCheckup,
+    admissionFilters,
+    setAdmissionFilters,
+    resetAdmissionFilters,
+  } = useAppStore();
+
+  const searchText = admissionFilters.search;
+  const filterLevel = admissionFilters.level;
+  const filterStatus = admissionFilters.status;
+  const filterGender = admissionFilters.gender;
 
   const [formData, setFormData] = useState({
     name: "",
@@ -201,6 +220,16 @@ export default function Admission() {
             <Stethoscope className="w-3.5 h-3.5" />
             体检
           </button>
+          <button
+            onClick={() => {
+              setProfileDetaineeId(row.id);
+              setProfileModalOpen(true);
+            }}
+            className="text-xs text-police-600 hover:text-police-700 flex items-center gap-1"
+          >
+            <User className="w-3.5 h-3.5" />
+            画像
+          </button>
         </div>
       ),
     },
@@ -318,7 +347,11 @@ export default function Admission() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="在戒人员总数"
-          value={detainees.length}
+          value={
+            filterLevel || filterStatus || filterGender || searchText
+              ? `${filteredDetainees.length} / ${detainees.length}`
+              : detainees.length
+          }
           icon={UserPlus}
           color="blue"
           trend={{ value: 8, label: "较上月" }}
@@ -343,6 +376,31 @@ export default function Admission() {
           color="purple"
         />
       </div>
+
+      {(filterLevel || filterStatus || filterGender || searchText) && (
+        <div className="bg-blue-50 border border-blue-200 rounded-sm px-4 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm text-blue-700">
+            <Filter className="w-4 h-4" />
+            <span>
+              筛选条件：
+              {[
+                filterLevel && `等级：${filterLevel}`,
+                filterStatus && `状态：${filterStatus}`,
+                filterGender && `性别：${filterGender}`,
+                searchText && `搜索：${searchText}`,
+              ]
+                .filter(Boolean)
+                .join("，")}
+            </span>
+          </div>
+          <button
+            className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+            onClick={() => resetAdmissionFilters()}
+          >
+            清除筛选
+          </button>
+        </div>
+      )}
 
       <div className="flex gap-2 border-b border-slate-200">
         {tabs.map((tab) => (
@@ -374,7 +432,9 @@ export default function Admission() {
                         type="text"
                         placeholder="搜索姓名/身份证..."
                         value={searchText}
-                        onChange={(e) => setSearchText(e.target.value)}
+                        onChange={(e) =>
+                          setAdmissionFilters({ search: e.target.value })
+                        }
                         className="pl-9 pr-4 py-2 w-48 text-sm border border-slate-200 rounded-sm focus:outline-none focus:ring-2 focus:ring-police-500"
                       />
                     </div>
@@ -997,9 +1057,7 @@ export default function Admission() {
             <button
               className="btn-secondary"
               onClick={() => {
-                setFilterLevel("");
-                setFilterStatus("");
-                setFilterGender("");
+                resetAdmissionFilters();
               }}
             >
               重置
@@ -1022,7 +1080,11 @@ export default function Admission() {
                       ? "bg-police-50 border-police-500 text-police-700 font-medium"
                       : "border-slate-200 hover:border-slate-300 text-slate-600"
                   }`}
-                  onClick={() => setFilterLevel(filterLevel === level ? "" : level)}
+                  onClick={() =>
+                    setAdmissionFilters({
+                      level: filterLevel === level ? "" : level,
+                    })
+                  }
                 >
                   {level}
                 </button>
@@ -1032,7 +1094,7 @@ export default function Admission() {
           <div>
             <label className="label">状态</label>
             <div className="flex flex-wrap gap-2 mt-2">
-              {["正常", "治疗中", "隔离", "离所"].map((status) => (
+              {["正常", "治疗中", "隔离", "待解除"].map((status) => (
                 <button
                   key={status}
                   className={`px-4 py-2 text-sm rounded-sm border transition-colors ${
@@ -1040,7 +1102,11 @@ export default function Admission() {
                       ? "bg-police-50 border-police-500 text-police-700 font-medium"
                       : "border-slate-200 hover:border-slate-300 text-slate-600"
                   }`}
-                  onClick={() => setFilterStatus(filterStatus === status ? "" : status)}
+                  onClick={() =>
+                    setAdmissionFilters({
+                      status: filterStatus === status ? "" : status,
+                    })
+                  }
                 >
                   {status}
                 </button>
@@ -1058,7 +1124,11 @@ export default function Admission() {
                       ? "bg-police-50 border-police-500 text-police-700 font-medium"
                       : "border-slate-200 hover:border-slate-300 text-slate-600"
                   }`}
-                  onClick={() => setFilterGender(filterGender === gender ? "" : gender)}
+                  onClick={() =>
+                    setAdmissionFilters({
+                      gender: filterGender === gender ? "" : gender,
+                    })
+                  }
                 >
                   {gender}
                 </button>
@@ -1215,6 +1285,322 @@ export default function Admission() {
             </div>
           )}
         </div>
+      </Modal>
+
+      <Modal
+        isOpen={profileModalOpen}
+        onClose={() => {
+          setProfileModalOpen(false);
+          setProfileDetaineeId("");
+        }}
+        title="个人戒治画像"
+        width="max-w-3xl"
+        footer={
+          <button
+            className="btn-secondary"
+            onClick={() => {
+              setProfileModalOpen(false);
+              setProfileDetaineeId("");
+            }}
+          >
+            关闭
+          </button>
+        }
+      >
+        {(() => {
+          const d = detainees.find((item) => item.id === profileDetaineeId);
+          if (!d) return <p className="text-slate-500">未找到人员信息</p>;
+
+          const personTreatments = treatments.filter(
+            (t) => t.detaineeId === profileDetaineeId
+          );
+          const personUrineTests = urineTests.filter(
+            (u) => u.detaineeId === profileDetaineeId
+          );
+          const personCounselings = counselings.filter(
+            (c) => c.detaineeId === profileDetaineeId
+          );
+          const personAssessments = psychAssessments.filter(
+            (p) => p.detaineeId === profileDetaineeId
+          );
+          const personTrainings = trainingRecords.filter(
+            (t) => t.detaineeId === profileDetaineeId
+          );
+          const personViolations = violations.filter(
+            (v) => v.detaineeId === profileDetaineeId
+          );
+          const personHealth = healthCheckups.filter(
+            (h) => h.detaineeId === profileDetaineeId
+          );
+          const personDocs = documents.filter(
+            (doc) => doc.detaineeId === profileDetaineeId
+          );
+          const personLevels = levelChanges.filter(
+            (l) => l.detaineeId === profileDetaineeId
+          );
+
+          const avgProgress =
+            personTreatments.length > 0
+              ? Math.round(
+                  personTreatments.reduce((s, t) => s + t.progress, 0) /
+                    personTreatments.length
+                )
+              : 0;
+          const avgPerformance =
+            personTrainings.length > 0
+              ? Math.round(
+                  personTrainings.reduce((s, t) => s + t.performance, 0) /
+                    personTrainings.length
+                )
+              : 0;
+          const latestAssessment = [...personAssessments].sort(
+            (a, b) => b.date.localeCompare(a.date)
+          )[0];
+
+          return (
+            <div className="space-y-5">
+              <div className="flex items-center gap-4 pb-4 border-b border-slate-100">
+                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-police-500 to-police-700 flex items-center justify-center">
+                  <User className="w-8 h-8 text-white" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-lg font-semibold text-slate-800">
+                    {d.name}
+                  </h4>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="text-sm text-slate-500">{d.id}</span>
+                    <StatusBadge
+                      type={
+                        d.currentLevel === "一级"
+                          ? "danger"
+                          : d.currentLevel === "二级"
+                          ? "warning"
+                          : d.currentLevel === "三级"
+                          ? "info"
+                          : "success"
+                      }
+                    >
+                      {d.currentLevel}
+                    </StatusBadge>
+                    <StatusBadge
+                      type={
+                        d.status === "正常"
+                          ? "success"
+                          : d.status === "治疗中"
+                          ? "blue"
+                          : d.status === "隔离"
+                          ? "warning"
+                          : "info"
+                      }
+                    >
+                      {d.status}
+                    </StatusBadge>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm text-slate-500">入所日期</p>
+                  <p className="text-base font-semibold text-slate-800">
+                    {d.admitDate}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-4 gap-3">
+                <div className="bg-blue-50 rounded-sm p-3 text-center">
+                  <p className="text-2xl font-bold text-blue-700">
+                    {personTreatments.length}
+                  </p>
+                  <p className="text-xs text-blue-600 mt-1">治疗记录</p>
+                </div>
+                <div className="bg-green-50 rounded-sm p-3 text-center">
+                  <p className="text-2xl font-bold text-green-700">
+                    {personUrineTests.length}
+                  </p>
+                  <p className="text-xs text-green-600 mt-1">尿检次数</p>
+                </div>
+                <div className="bg-purple-50 rounded-sm p-3 text-center">
+                  <p className="text-2xl font-bold text-purple-700">
+                    {personCounselings.length}
+                  </p>
+                  <p className="text-xs text-purple-600 mt-1">心理咨询</p>
+                </div>
+                <div className="bg-orange-50 rounded-sm p-3 text-center">
+                  <p className="text-2xl font-bold text-orange-700">
+                    {personTrainings.length}
+                  </p>
+                  <p className="text-xs text-orange-600 mt-1">训练记录</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="card mb-0">
+                  <h5 className="text-sm font-semibold text-slate-700 mb-3">
+                    生理脱毒
+                  </h5>
+                  <div className="space-y-2.5 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">平均治疗进度</span>
+                      <span className="font-medium text-slate-700">
+                        {avgProgress}%
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">尿检阴性率</span>
+                      <span className="font-medium text-health-600">
+                        {personUrineTests.length > 0
+                          ? (
+                              (personUrineTests.filter(
+                                (u) => u.result === "阴性"
+                              ).length /
+                                personUrineTests.length) *
+                              100
+                            ).toFixed(1) + "%"
+                          : "-"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">体检次数</span>
+                      <span className="font-medium text-slate-700">
+                        {personHealth.length}次
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="card mb-0">
+                  <h5 className="text-sm font-semibold text-slate-700 mb-3">
+                    心理矫治
+                  </h5>
+                  <div className="space-y-2.5 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">最新评估</span>
+                      <span className="font-medium text-slate-700">
+                        {latestAssessment
+                          ? latestAssessment.scale.slice(0, 6)
+                          : "-"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">风险等级</span>
+                      <StatusBadge
+                        type={
+                          latestAssessment?.riskLevel === "高风险"
+                            ? "danger"
+                            : latestAssessment?.riskLevel === "中风险"
+                            ? "warning"
+                            : "success"
+                        }
+                      >
+                        {latestAssessment?.riskLevel || "未评估"}
+                      </StatusBadge>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">咨询总时长</span>
+                      <span className="font-medium text-slate-700">
+                        {personCounselings.reduce(
+                          (s, c) => s + c.duration,
+                          0
+                        )}{" "}
+                        分钟
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="card mb-0">
+                  <h5 className="text-sm font-semibold text-slate-700 mb-3">
+                    康复训练
+                  </h5>
+                  <div className="space-y-2.5 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">平均表现分</span>
+                      <span className="font-medium text-slate-700">
+                        {avgPerformance}分
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">体能训练</span>
+                      <span className="font-medium text-slate-700">
+                        {
+                          personTrainings.filter(
+                            (t) => t.type === "体能训练"
+                          ).length
+                        }{" "}
+                        次
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">技能培训</span>
+                      <span className="font-medium text-slate-700">
+                        {
+                          personTrainings.filter(
+                            (t) => t.type === "技能培训"
+                          ).length
+                        }{" "}
+                        次
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="card mb-0">
+                  <h5 className="text-sm font-semibold text-slate-700 mb-3">
+                    所内管理
+                  </h5>
+                  <div className="space-y-2.5 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">违规记录</span>
+                      <span
+                        className={`font-medium ${
+                          personViolations.length > 0
+                            ? "text-warning-600"
+                            : "text-slate-700"
+                        }`}
+                      >
+                        {personViolations.length}次
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">等级变更</span>
+                      <span className="font-medium text-slate-700">
+                        {personLevels.length}次
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">当前等级</span>
+                      <span className="font-medium text-police-600">
+                        {d.currentLevel}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {personDocs.length > 0 && (
+                <div className="card mb-0">
+                  <h5 className="text-sm font-semibold text-slate-700 mb-3">
+                    已生成文书
+                  </h5>
+                  <div className="grid grid-cols-3 gap-2">
+                    {personDocs.map((doc) => (
+                      <div
+                        key={doc.id}
+                        className="p-2.5 bg-slate-50 rounded-sm border border-slate-100"
+                      >
+                        <p className="text-sm font-medium text-slate-700 truncate">
+                          {doc.type}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {doc.generatedAt}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </Modal>
     </PageContainer>
   );

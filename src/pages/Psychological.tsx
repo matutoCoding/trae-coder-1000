@@ -22,6 +22,7 @@ import DataTable from "@/components/DataTable";
 import type { Column } from "@/components/DataTable";
 import StatusBadge from "@/components/StatusBadge";
 import Modal from "@/components/Modal";
+import PersonProfileModal from "@/components/PersonProfileModal";
 import { useAppStore } from "@/store/useAppStore";
 import type { Counseling, PsychAssessment } from "@/types";
 
@@ -42,6 +43,8 @@ export default function Psychological() {
   const [activeTab, setActiveTab] = useState("counseling");
   const [counselingModalOpen, setCounselingModalOpen] = useState(false);
   const [assessmentModalOpen, setAssessmentModalOpen] = useState(false);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [profileDetaineeId, setProfileDetaineeId] = useState("");
 
   const { detainees, counselings, psychAssessments, addCounseling, addPsychAssessment } =
     useAppStore();
@@ -157,6 +160,25 @@ export default function Psychological() {
       },
     },
     { key: "summary", title: "咨询摘要" },
+    {
+      key: "actions",
+      title: "操作",
+      width: "100px",
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setProfileDetaineeId(row.detaineeId);
+              setProfileModalOpen(true);
+            }}
+            className="text-xs text-police-600 hover:text-police-700 flex items-center gap-1"
+          >
+            <User className="w-3.5 h-3.5" />
+            画像
+          </button>
+        </div>
+      ),
+    },
   ];
 
   const assessmentColumns: Column<PsychAssessment>[] = [
@@ -202,6 +224,25 @@ export default function Psychological() {
       ),
     },
     { key: "conclusion", title: "评估结论" },
+    {
+      key: "actions",
+      title: "操作",
+      width: "100px",
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setProfileDetaineeId(row.detaineeId);
+              setProfileModalOpen(true);
+            }}
+            className="text-xs text-police-600 hover:text-police-700 flex items-center gap-1"
+          >
+            <User className="w-3.5 h-3.5" />
+            画像
+          </button>
+        </div>
+      ),
+    },
   ];
 
   const moodTrendOption = useMemo(() => {
@@ -910,6 +951,15 @@ export default function Psychological() {
           </div>
         </div>
       </Modal>
+
+      <PersonProfileModal
+        isOpen={profileModalOpen}
+        onClose={() => {
+          setProfileModalOpen(false);
+          setProfileDetaineeId("");
+        }}
+        detaineeId={profileDetaineeId}
+      />
     </PageContainer>
   );
 }

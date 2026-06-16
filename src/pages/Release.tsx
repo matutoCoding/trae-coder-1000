@@ -16,6 +16,7 @@ import {
   FileText,
   ArrowRight,
   Check,
+  Printer,
 } from "lucide-react";
 import PageContainer from "@/components/PageContainer";
 import StatCard from "@/components/StatCard";
@@ -24,11 +25,12 @@ import type { Column } from "@/components/DataTable";
 import StatusBadge from "@/components/StatusBadge";
 import Modal from "@/components/Modal";
 import { useAppStore } from "@/store/useAppStore";
-import type { Release, AftercareRecord } from "@/types";
+import type { Release, AftercareRecord, DocumentRecord } from "@/types";
 
 const tabs = [
   { id: "release", label: "期满解除" },
   { id: "aftercare", label: "后续照管" },
+  { id: "documents", label: "文书记录" },
 ];
 
 export default function Release() {
@@ -48,14 +50,25 @@ export default function Release() {
   const [documentModalOpen, setDocumentModalOpen] = useState(false);
   const [selectedDocRelease, setSelectedDocRelease] = useState<Release | null>(null);
   const [documentType, setDocumentType] = useState("解除强制隔离戒毒决定书");
+  const [docDetailModalOpen, setDocDetailModalOpen] = useState(false);
+  const [selectedDoc, setSelectedDoc] = useState<DocumentRecord | null>(null);
 
   const {
     detainees,
     releases,
     aftercareRecords,
+    treatments,
+    urineTests,
+    psychAssessments,
+    counselings,
+    trainingRecords,
+    healthCheckups,
+    violations,
+    documents,
     addRelease,
     updateReleaseStatus,
     addAftercareRecord,
+    addDocument,
   } = useAppStore();
 
   const [releaseForm, setReleaseForm] = useState({
@@ -126,6 +139,86 @@ export default function Release() {
       result: "",
     });
     setAftercareModalOpen(false);
+  };
+
+  const buildDocumentSummary = (detaineeId: string, docType: string) => {
+    const person = detainees.find((d) => d.id === detaineeId);
+    if (!person) return { summary: "", content: "" };
+
+    const personTreatments = treatments.filter(
+      (t) => t.detaineeId === detaineeId
+    );
+    const personUrine = urineTests.filter(
+      (u) => u.detaineeId === detaineeId
+    );
+    const personCounsel = counselings.filter(
+      (c) => c.detaineeId === detaineeId
+    );
+    const personAssess = psychAssessments.filter(
+      (p) => p.detaineeId === detaineeId
+    );
+    const personTrain = trainingRecords.filter(
+      (t) => t.detaineeId === detaineeId
+    );
+    const personHealth = healthCheckups.filter(
+      (h) => h.detaineeId === detaineeId
+    );
+
+    const latestAssess = [...personAssess].sort(
+      (a, b) => b.date.localeCompare(a.date)
+    )[0];
+    const urineNegativeRate =
+      personUrine.length > 0
+        ? Math.round(
+            (personUrine.filter((u) => u.result === "阴性").length /
+              personUrine.length) *
+              100
+          )
+        : 0;
+    const avgProgress =
+      personTreatments.length > 0
+        ? Math.round(
+            personTreatments.reduce((s, t) => s + t.progress, 0) /
+              personTreatments.length
+          )
+        : 0;
+    const avgPerformance =
+      personTrain.length > 0
+        ? Math.round(
+            personTrain.reduce((s, t) => s + t.performance, 0) /
+              personTrain.length
+          )
+        : 0;
+
+    const summary = `生理脱毒${personTreatments.length}次，尿检阴性率${urineNegativeRate}%，心理咨询${personCounsel.length}次，${latestAssess ? `最新评估${latestAssess.riskLevel}` : "未做心理评估"}，训练${personTrain.length}次，均分${avgPerformance}分`;
+
+    const content = `被鉴定人${person.name}，${person.gender}，身份证号${person.idCard}。于${person.admitDate}入所接受强制隔离戒毒，期限${person.durationMonths}个月。\n\n生理脱毒治疗方面：共完成${personTreatments.length}次治疗，平均治疗进度${avgProgress}%。尿检${personUrine.length}次，其中阴性${personUrine.filter((u) => u.result === "阴性").length}次，阳性${personUrine.filter((u) => u.result === "阳性").length}次，阴性率${urineNegativeRate}%。${personHealth.length > 0 ? `入所体检${personHealth.length}次，身体状况基本良好。` : ""}\n\n心理矫治方面：共进行${personCounsel.length}次心理咨询，${personAssess.length}次心理评估。${latestAssess ? `最新心理评估为${latestAssess.scale}，得分${latestAssess.score}分，风险等级${latestAssess.riskLevel}。` : "暂无心理评估记录。"}\n\n康复训练方面：共参与${personTrain.length}次训练（其中体能${personTrain.filter((t) => t.type === "体能训练").length}次，技能培训${personTrain.filter((t) => t.type === "技能培训").length}次），平均表现分为${avgPerformance}分。\n\n综合评定：该员在戒治期间总体表现良好，生理脱毒效果显著，心理状态稳定，建议按期办理解除手续，并做好后续社区照管衔接工作。`;
+
+    return { summary, content };
+  };
+
+  const handleGenerateDocument = () => {
+    if (!selectedDocRelease) return;
+    const { summary, content } = buildDocumentSummary(
+      selectedDocRelease.detaineeId,
+      documentType
+    );
+
+    addDocument({
+      detaineeId: selectedDocRelease.detaineeId,
+      detaineeName: selectedDocRelease.detaineeName,
+      type: documentType as DocumentRecord["type"],
+      title: `${selectedDocRelease.detaineeName} - ${documentType}`,
+      summary,
+      generatedAt: new Date().toISOString().split("T")[0],
+      generatedBy: "系统自动生成",
+      status: "已生成",
+      content,
+    });
+
+    alert("文书已生成，可在文书记录中查看");
+    setDocumentModalOpen(false);
+    setSelectedDocRelease(null);
   };
 
   const openReleaseDetail = (release: Release) => {
@@ -819,6 +912,257 @@ export default function Release() {
         </div>
       )}
 
+      {activeTab === "documents" && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
+            <div className="card">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="section-title mb-0">文书记录</h3>
+                <div className="flex items-center gap-2 text-sm text-slate-500">
+                  <FileText className="w-4 h-4" />
+                  <span>共 {documents.length} 份文书</span>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {documents.length > 0 ? (
+                  documents.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="p-4 border border-slate-200 rounded-sm hover:border-police-300 hover:shadow-sm transition-all cursor-pointer"
+                      onClick={() => {
+                        setSelectedDoc(doc);
+                        setDocDetailModalOpen(true);
+                      }}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-3">
+                          <div className="p-2 bg-blue-50 rounded-sm">
+                            <FileText className="w-5 h-5 text-blue-600" />
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-slate-800">
+                              {doc.type}
+                            </h4>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                              {doc.detaineeName} · {doc.generatedAt}
+                            </p>
+                            <p className="text-sm text-slate-600 mt-1.5 line-clamp-1">
+                              {doc.summary}
+                            </p>
+                          </div>
+                        </div>
+                        <StatusBadge
+                          type={
+                            doc.status === "已签发"
+                              ? "success"
+                              : doc.status === "已打印"
+                              ? "blue"
+                              : "info"
+                          }
+                        >
+                          {doc.status}
+                        </StatusBadge>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-12 text-slate-400">
+                    <FileText className="w-10 h-10 mx-auto mb-3 opacity-50" />
+                    <p>暂无文书记录</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div className="card">
+              <h3 className="section-title">文书类型分布</h3>
+              <div className="space-y-3">
+                {[
+                  "出所鉴定书",
+                  "解除强制隔离戒毒决定书",
+                  "社区衔接通知书",
+                  "入所体检报告",
+                  "心理评估报告",
+                  "训练考核证明",
+                ].map((type) => {
+                  const count = documents.filter(
+                    (d) => d.type === type
+                  ).length;
+                  const maxCount = Math.max(
+                    ...[
+                      "出所鉴定书",
+                      "解除强制隔离戒毒决定书",
+                      "社区衔接通知书",
+                      "入所体检报告",
+                      "心理评估报告",
+                      "训练考核证明",
+                    ].map(
+                      (t) => documents.filter((d) => d.type === t).length
+                    ),
+                    1
+                  );
+                  return (
+                    <div key={type}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-slate-600">
+                          {type}
+                        </span>
+                        <span className="text-xs font-medium text-slate-700">
+                          {count}
+                        </span>
+                      </div>
+                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-police-500 rounded-full"
+                          style={{ width: `${(count / maxCount) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="card">
+              <h3 className="section-title">本月生成</h3>
+              <div className="text-center py-4">
+                <p className="text-3xl font-bold text-police-700">
+                  {documents.length}
+                </p>
+                <p className="text-sm text-slate-500 mt-1">份文书</p>
+              </div>
+              <div className="grid grid-cols-3 gap-2 pt-3 border-t border-slate-100">
+                <div className="text-center">
+                  <p className="text-lg font-semibold text-slate-700">
+                    {documents.filter((d) => d.status === "已签发").length}
+                  </p>
+                  <p className="text-xs text-slate-500">已签发</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-lg font-semibold text-slate-700">
+                    {documents.filter((d) => d.status === "已打印").length}
+                  </p>
+                  <p className="text-xs text-slate-500">已打印</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-lg font-semibold text-slate-700">
+                    {documents.filter((d) => d.status === "已生成").length}
+                  </p>
+                  <p className="text-xs text-slate-500">待签发</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <Modal
+        isOpen={docDetailModalOpen}
+        onClose={() => {
+          setDocDetailModalOpen(false);
+          setSelectedDoc(null);
+        }}
+        title="文书详情"
+        width="max-w-xl"
+        footer={
+          <>
+            <button
+              className="btn-secondary"
+              onClick={() => {
+                setDocDetailModalOpen(false);
+                setSelectedDoc(null);
+              }}
+            >
+              关闭
+            </button>
+            <button
+              className="btn-primary"
+              onClick={() => {
+                if (selectedDoc) {
+                  alert("文书已发送至打印队列");
+                }
+              }}
+            >
+              <Printer className="w-4 h-4" />
+              打印
+            </button>
+          </>
+        }
+      >
+        {selectedDoc && (
+          <div className="space-y-4">
+            <div className="text-center pb-4 border-b border-slate-100">
+              <h4 className="text-lg font-bold text-slate-800">
+                {selectedDoc.title}
+              </h4>
+              <div className="flex items-center justify-center gap-3 mt-2">
+                <span className="text-xs text-slate-400">
+                  编号：{selectedDoc.id}
+                </span>
+                <StatusBadge
+                  type={
+                    selectedDoc.status === "已签发"
+                      ? "success"
+                      : selectedDoc.status === "已打印"
+                      ? "blue"
+                      : "info"
+                  }
+                >
+                  {selectedDoc.status}
+                </StatusBadge>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-slate-500">人员姓名：</span>
+                <span className="font-medium text-slate-800">
+                  {selectedDoc.detaineeName}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500">生成时间：</span>
+                <span className="font-medium text-slate-800">
+                  {selectedDoc.generatedAt}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500">生成人员：</span>
+                <span className="font-medium text-slate-800">
+                  {selectedDoc.generatedBy}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500">文书类型：</span>
+                <span className="font-medium text-slate-800">
+                  {selectedDoc.type}
+                </span>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100">
+              <h5 className="text-sm font-semibold text-slate-700 mb-2">
+                文书摘要
+              </h5>
+              <p className="text-sm text-slate-600">
+                {selectedDoc.summary}
+              </p>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100">
+              <h5 className="text-sm font-semibold text-slate-700 mb-2">
+                文书正文
+              </h5>
+              <div className="bg-slate-50 rounded-sm p-4 text-sm text-slate-600 leading-relaxed whitespace-pre-line max-h-80 overflow-y-auto">
+                {selectedDoc.content}
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       <Modal
         isOpen={releaseModalOpen}
         onClose={() => setReleaseModalOpen(false)}
@@ -1264,76 +1608,237 @@ export default function Release() {
           setSelectedReportRelease(null);
         }}
         title="鉴定报告"
-        width="max-w-lg"
+        width="max-w-xl"
         footer={
-          <button
-            className="btn-secondary"
-            onClick={() => {
-              setReportModalOpen(false);
-              setSelectedReportRelease(null);
-            }}
-          >
-            关闭
-          </button>
+          <>
+            <button
+              className="btn-secondary"
+              onClick={() => {
+                setReportModalOpen(false);
+                setSelectedReportRelease(null);
+              }}
+            >
+              关闭
+            </button>
+            <button
+              className="btn-primary"
+              onClick={() => {
+                if (!selectedReportRelease) return;
+                const { summary, content } = buildDocumentSummary(
+                  selectedReportRelease.detaineeId,
+                  "出所鉴定书"
+                );
+                addDocument({
+                  detaineeId: selectedReportRelease.detaineeId,
+                  detaineeName: selectedReportRelease.detaineeName,
+                  type: "出所鉴定书",
+                  title: `${selectedReportRelease.detaineeName} - 出所鉴定书`,
+                  summary,
+                  generatedAt: new Date().toISOString().split("T")[0],
+                  generatedBy: "鉴定委员会",
+                  status: "已生成",
+                  content,
+                });
+                alert("鉴定报告已生成并保存到文书记录");
+                setReportModalOpen(false);
+                setSelectedReportRelease(null);
+              }}
+            >
+              <Download className="w-4 h-4" />
+              生成文书
+            </button>
+          </>
         }
       >
-        {selectedReportRelease && (
-          <div className="space-y-4">
-            <div className="text-center pb-4 border-b border-slate-100">
-              <h4 className="text-lg font-bold text-slate-800">出所鉴定报告</h4>
-              <p className="text-xs text-slate-400 mt-1">
-                报告编号：JD-{selectedReportRelease.id.slice(0, 8).toUpperCase()}
-              </p>
-            </div>
-            <div className="space-y-3 text-sm">
-              <div className="flex">
-                <span className="text-slate-500 w-28 flex-shrink-0">被鉴定人：</span>
-                <span className="text-slate-800 font-medium">
-                  {selectedReportRelease.detaineeName}
-                </span>
+        {selectedReportRelease &&
+          (() => {
+            const { summary, content } = buildDocumentSummary(
+              selectedReportRelease.detaineeId,
+              "出所鉴定书"
+            );
+            const person = detainees.find(
+              (d) => d.id === selectedReportRelease.detaineeId
+            );
+            const personAssess = psychAssessments.filter(
+              (p) => p.detaineeId === selectedReportRelease.detaineeId
+            );
+            const latestAssess = [...personAssess].sort(
+              (a, b) => b.date.localeCompare(a.date)
+            )[0];
+
+            return (
+              <div className="space-y-5">
+                <div className="text-center pb-4 border-b border-slate-100">
+                  <h4 className="text-lg font-bold text-slate-800">
+                    出所鉴定报告
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-1">
+                    报告编号：
+                    {selectedReportRelease.id.slice(0, 8).toUpperCase()}-JD
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-slate-500">被鉴定人：</span>
+                    <span className="font-medium text-slate-800">
+                      {selectedReportRelease.detaineeName}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">性 别：</span>
+                    <span className="font-medium text-slate-800">
+                      {person?.gender || "-"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">入所日期：</span>
+                    <span className="font-medium text-slate-800">
+                      {person?.admitDate || "-"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">鉴定日期：</span>
+                    <span className="font-medium text-slate-800">
+                      {selectedReportRelease.releaseDate}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <h5 className="text-sm font-semibold text-slate-700">
+                    一、生理脱毒情况
+                  </h5>
+                  <div className="bg-blue-50 rounded-sm p-3 space-y-1.5 text-sm">
+                    <p>
+                      治疗次数：
+                      <span className="font-medium">
+                        {
+                          treatments.filter(
+                            (t) =>
+                              t.detaineeId === selectedReportRelease.detaineeId
+                          ).length
+                        }{" "}
+                        次
+                      </span>
+                    </p>
+                    <p>
+                      尿检次数：
+                      <span className="font-medium">
+                        {
+                          urineTests.filter(
+                            (u) =>
+                              u.detaineeId === selectedReportRelease.detaineeId
+                          ).length
+                        }{" "}
+                        次
+                      </span>
+                    </p>
+                    <p>
+                      尿检阴性率：
+                      <span className="font-medium text-health-600">
+                        {summary ? summary.split("尿检阴性率")[1].split("%")[0] + "%" : "-"}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <h5 className="text-sm font-semibold text-slate-700">
+                    二、心理评估情况
+                  </h5>
+                  <div className="bg-purple-50 rounded-sm p-3 space-y-1.5 text-sm">
+                    <p>
+                      心理咨询：
+                      <span className="font-medium">
+                        {
+                          counselings.filter(
+                            (c) =>
+                              c.detaineeId === selectedReportRelease.detaineeId
+                          ).length
+                        }{" "}
+                        次
+                      </span>
+                    </p>
+                    <p>
+                      心理评估：
+                      <span className="font-medium">
+                        {personAssess.length} 次
+                      </span>
+                    </p>
+                    <p>
+                      风险等级：
+                      <StatusBadge
+                        type={
+                          latestAssess?.riskLevel === "高风险"
+                            ? "danger"
+                            : latestAssess?.riskLevel === "中风险"
+                            ? "warning"
+                            : "success"
+                        }
+                      >
+                        {latestAssess?.riskLevel || "未评估"}
+                      </StatusBadge>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <h5 className="text-sm font-semibold text-slate-700">
+                    三、康复训练情况
+                  </h5>
+                  <div className="bg-green-50 rounded-sm p-3 space-y-1.5 text-sm">
+                    <p>
+                      训练次数：
+                      <span className="font-medium">
+                        {
+                          trainingRecords.filter(
+                            (t) =>
+                              t.detaineeId === selectedReportRelease.detaineeId
+                          ).length
+                        }{" "}
+                        次
+                      </span>
+                    </p>
+                    <p>
+                      平均表现：
+                      <span className="font-medium">
+                        {trainingRecords.filter(
+                          (t) =>
+                            t.detaineeId === selectedReportRelease.detaineeId
+                        ).length > 0
+                          ? Math.round(
+                              trainingRecords
+                                .filter(
+                                  (t) =>
+                                    t.detaineeId ===
+                                    selectedReportRelease.detaineeId
+                                )
+                                .reduce((s, t) => s + t.performance, 0) /
+                                trainingRecords.filter(
+                                  (t) =>
+                                    t.detaineeId ===
+                                    selectedReportRelease.detaineeId
+                                ).length
+                            ) + "分"
+                          : "-"}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-slate-100">
+                  <h5 className="text-sm font-semibold text-slate-700 mb-2">
+                    四、鉴定结论
+                  </h5>
+                  <p className="text-sm text-slate-600 leading-relaxed">
+                    {selectedReportRelease.assessmentResult ||
+                      "经综合评估，该员在强制隔离戒毒期间表现良好，生理脱毒效果显著，心理状态稳定，社会适应能力较强，符合解除强制隔离戒毒条件。建议按期办理解除手续，并做好后续社区照管衔接工作。"}
+                  </p>
+                </div>
               </div>
-              <div className="flex">
-                <span className="text-slate-500 w-28 flex-shrink-0">鉴定日期：</span>
-                <span className="text-slate-700">{selectedReportRelease.releaseDate}</span>
-              </div>
-              <div className="flex">
-                <span className="text-slate-500 w-28 flex-shrink-0">鉴定结果：</span>
-                <span className="text-slate-700">
-                  {selectedReportRelease.assessmentResult || "戒治效果良好，符合出所条件"}
-                </span>
-              </div>
-              <div className="flex">
-                <span className="text-slate-500 w-28 flex-shrink-0">风险评估：</span>
-                <StatusBadge
-                  type={
-                    selectedReportRelease.status === "已解除"
-                      ? "success"
-                      : selectedReportRelease.status === "已批准"
-                      ? "info"
-                      : "warning"
-                  }
-                >
-                  {selectedReportRelease.status === "已解除"
-                    ? "低风险"
-                    : selectedReportRelease.status === "已批准"
-                    ? "中低风险"
-                    : "待评估"}
-                </StatusBadge>
-              </div>
-            </div>
-            <div className="pt-4 border-t border-slate-100">
-              <h5 className="text-sm font-medium text-slate-700 mb-2">鉴定总结</h5>
-              <p className="text-sm text-slate-600 leading-relaxed">
-                经综合评估，{selectedReportRelease.detaineeName}
-                在强制隔离戒毒期间表现良好，生理脱毒效果显著，心理状态稳定。
-                {selectedReportRelease.assessmentResult
-                  ? `出所鉴定结论：${selectedReportRelease.assessmentResult}。`
-                  : "出所鉴定结论：符合解除强制隔离戒毒条件。"}
-                建议按期办理解除手续，并做好后续社区照管衔接工作。
-              </p>
-            </div>
-          </div>
-        )}
+            );
+          })()}
       </Modal>
 
       <Modal
@@ -1357,11 +1862,7 @@ export default function Release() {
             </button>
             <button
               className="btn-primary"
-              onClick={() => {
-                alert("文书已生成，可前往文书管理查看");
-                setDocumentModalOpen(false);
-                setSelectedDocRelease(null);
-              }}
+              onClick={handleGenerateDocument}
             >
               <FileText className="w-4 h-4" />
               生成文书

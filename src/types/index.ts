@@ -155,3 +155,22 @@ export interface AftercareRecord {
   contact: string;
   result: string;
 }
+
+export interface DocumentRecord {
+  id: string;
+  detaineeId: string;
+  detaineeName: string;
+  type:
+    | "出所鉴定书"
+    | "解除强制隔离戒毒决定书"
+    | "社区衔接通知书"
+    | "入所体检报告"
+    | "心理评估报告"
+    | "训练考核证明";
+  title: string;
+  summary: string;
+  generatedAt: string;
+  generatedBy: string;
+  status: "已生成" | "已打印" | "已签发";
+  content: string;
+}

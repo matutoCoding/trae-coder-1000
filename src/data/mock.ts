@@ -12,6 +12,7 @@ import type {
   Education,
   Release,
   AftercareRecord,
+  DocumentRecord,
 } from "../types";
 
 export const detainees: Detainee[] = [
@@ -585,5 +586,34 @@ export const aftercareRecords: AftercareRecord[] = [
     content: "出所前最后一次回访，了解其出所计划和心理准备情况",
     contact: "陈静本人",
     result: "状态积极，对未来生活有明确规划，表示将定期尿检",
+  },
+];
+
+export const documents: DocumentRecord[] = [
+  {
+    id: "DOC001",
+    detaineeId: "D001",
+    detaineeName: "张伟",
+    type: "入所体检报告",
+    title: "强制隔离戒毒人员入所体检报告",
+    summary: "入所体检，身体状况良好，无传染病史，毒品依赖程度三级",
+    generatedAt: "2025-06-16",
+    generatedBy: "医务科李医生",
+    status: "已签发",
+    content:
+      "身高175cm，体重68kg，血压120/80mmHg，心率78次/分。血液检查正常，无传染性疾病。毒品依赖程度评估为三级，建议常规脱毒治疗方案。",
+  },
+  {
+    id: "DOC002",
+    detaineeId: "D005",
+    detaineeName: "陈静",
+    type: "出所鉴定书",
+    title: "强制隔离戒毒人员出所鉴定书",
+    summary: "戒治效果良好，心理评估达标，社会适应能力较强，符合出所条件",
+    generatedAt: "2025-07-10",
+    generatedBy: "鉴定委员会",
+    status: "已签发",
+    content:
+      "被鉴定人陈静，入所以来戒治表现良好，各项考核均达标。生理脱毒治疗完成，连续多次尿检阴性。心理评估显示心理健康状况良好，社会适应能力较强。家庭支持系统完善，具备出所条件。",
   },
 ];
