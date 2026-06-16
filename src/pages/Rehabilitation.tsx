@@ -11,13 +11,16 @@ import {
   Calendar,
   CheckCircle,
   Star,
+  Check,
 } from "lucide-react";
 import PageContainer from "@/components/PageContainer";
 import StatCard from "@/components/StatCard";
 import DataTable from "@/components/DataTable";
 import type { Column } from "@/components/DataTable";
 import StatusBadge from "@/components/StatusBadge";
-import { trainingRecords } from "@/data/mock";
+import Modal from "@/components/Modal";
+import { useAppStore } from "@/store/useAppStore";
+import type { TrainingRecord } from "@/types";
 
 const tabs = [
   { id: "physical", label: "体能训练" },
@@ -26,11 +29,54 @@ const tabs = [
 
 export default function Rehabilitation() {
   const [activeTab, setActiveTab] = useState("physical");
+  const [trainingModalOpen, setTrainingModalOpen] = useState(false);
+
+  const { detainees, trainingRecords, addTrainingRecord } = useAppStore();
+
+  const [trainingForm, setTrainingForm] = useState({
+    detaineeId: "",
+    date: new Date().toISOString().split("T")[0],
+    type: "体能训练" as "体能训练" | "技能培训",
+    content: "",
+    duration: 60,
+    performance: 70,
+    coach: "",
+  });
 
   const physicalRecords = trainingRecords.filter((t) => t.type === "体能训练");
   const skillRecords = trainingRecords.filter((t) => t.type === "技能培训");
 
-  const physicalColumns: Column<typeof physicalRecords[0]>[] = [
+  const avgPerformance =
+    physicalRecords.length > 0
+      ? (
+          physicalRecords.reduce((sum, t) => sum + t.performance, 0) /
+          physicalRecords.length
+        ).toFixed(1)
+      : "0";
+
+  const handleAddTraining = () => {
+    if (!trainingForm.detaineeId || !trainingForm.content) return;
+    const detainee = detainees.find((d) => d.id === trainingForm.detaineeId);
+    if (!detainee) return;
+
+    addTrainingRecord({
+      ...trainingForm,
+      detaineeName: detainee.name,
+    } as Omit<TrainingRecord, "id">);
+
+    setTrainingForm({
+      detaineeId: "",
+      date: new Date().toISOString().split("T")[0],
+      type: activeTab === "physical" ? "体能训练" : "技能培训",
+      content: "",
+      duration: 60,
+      performance: 70,
+      coach: "",
+    });
+    setTrainingModalOpen(false);
+  };
+
+  const physicalColumns: Column<TrainingRecord>[] = [
     { key: "date", title: "训练日期", width: "120px" },
     {
       key: "detaineeName",
@@ -75,14 +121,16 @@ export default function Rehabilitation() {
               />
             ))}
           </div>
-          <span className="text-sm font-mono text-slate-600">{row.performance}</span>
+          <span className="text-sm font-mono text-slate-600">
+            {row.performance}
+          </span>
         </div>
       ),
     },
     { key: "coach", title: "教练", width: "100px" },
   ];
 
-  const skillColumns: Column<typeof skillRecords[0]>[] = [
+  const skillColumns: Column<TrainingRecord>[] = [
     { key: "date", title: "培训日期", width: "120px" },
     {
       key: "detaineeName",
@@ -109,7 +157,15 @@ export default function Rehabilitation() {
       title: "考核成绩",
       width: "110px",
       render: (row) => (
-        <StatusBadge type={row.performance >= 80 ? "success" : row.performance >= 60 ? "warning" : "danger"}>
+        <StatusBadge
+          type={
+            row.performance >= 80
+              ? "success"
+              : row.performance >= 60
+              ? "warning"
+              : "danger"
+          }
+        >
           {row.performance}分
         </StatusBadge>
       ),
@@ -154,7 +210,10 @@ export default function Rehabilitation() {
         areaStyle: {
           color: {
             type: "linear",
-            x: 0, y: 0, x2: 0, y2: 1,
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
             colorStops: [
               { offset: 0, color: "rgba(30, 64, 175, 0.3)" },
               { offset: 1, color: "rgba(30, 64, 175, 0.02)" },
@@ -167,7 +226,10 @@ export default function Rehabilitation() {
         type: "bar",
         yAxisIndex: 1,
         data: [68, 72, 75, 78, 80, 82],
-        itemStyle: { color: "rgba(6, 95, 70, 0.6)", borderRadius: [4, 4, 0, 0] },
+        itemStyle: {
+          color: "rgba(6, 95, 70, 0.6)",
+          borderRadius: [4, 4, 0, 0],
+        },
         barWidth: 20,
       },
     ],
@@ -262,6 +324,14 @@ export default function Rehabilitation() {
     },
   ];
 
+  const openAddModal = () => {
+    setTrainingForm({
+      ...trainingForm,
+      type: activeTab === "physical" ? "体能训练" : "技能培训",
+    });
+    setTrainingModalOpen(true);
+  };
+
   return (
     <PageContainer
       title="康复训练"
@@ -273,9 +343,9 @@ export default function Rehabilitation() {
             <Award className="w-4 h-4" />
             技能考核
           </button>
-          <button className="btn-primary">
+          <button className="btn-primary" onClick={openAddModal}>
             <Plus className="w-4 h-4" />
-            新增训练记录
+            {activeTab === "physical" ? "新增训练记录" : "新增培训记录"}
           </button>
         </div>
       }
@@ -283,7 +353,7 @@ export default function Rehabilitation() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="本月体能训练"
-          value="186"
+          value={physicalRecords.length}
           icon={Dumbbell}
           color="blue"
           trend={{ value: 12, label: "环比" }}
@@ -303,7 +373,7 @@ export default function Rehabilitation() {
         />
         <StatCard
           title="平均表现分"
-          value="82.5"
+          value={avgPerformance}
           icon={TrendingUp}
           color="orange"
         />
@@ -350,8 +420,8 @@ export default function Rehabilitation() {
                   const validDay = day > 0 && day <= 30;
                   const activity = validDay
                     ? [
-                        1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20,
-                        21, 22, 24, 25, 26, 27, 28, 29,
+                        1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 17, 18, 19,
+                        20, 21, 22, 24, 25, 26, 27, 28, 29,
                       ].includes(day)
                       ? Math.random() > 0.4
                         ? "high"
@@ -390,7 +460,10 @@ export default function Rehabilitation() {
           <div className="space-y-6">
             <div className="card">
               <h3 className="section-title">训练表现趋势</h3>
-              <ReactECharts option={performanceTrendOption} style={{ height: 280 }} />
+              <ReactECharts
+                option={performanceTrendOption}
+                style={{ height: 280 }}
+              />
             </div>
 
             <div className="card">
@@ -406,7 +479,9 @@ export default function Rehabilitation() {
                   <div key={index}>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-sm text-slate-700">{item.name}</span>
-                      <span className="text-xs text-slate-500">{item.count}人次</span>
+                      <span className="text-xs text-slate-500">
+                        {item.count}人次
+                      </span>
                     </div>
                     <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                       <div
@@ -430,7 +505,9 @@ export default function Rehabilitation() {
                 key={course.id}
                 className="card card-hover cursor-pointer overflow-hidden"
               >
-                <div className={`h-24 bg-gradient-to-br ${course.color} -m-6 mb-4`}>
+                <div
+                  className={`h-24 bg-gradient-to-br ${course.color} -m-6 mb-4`}
+                >
                   <div className="h-full flex items-center justify-between px-6">
                     <div>
                       <StatusBadge type="default">{course.category}</StatusBadge>
@@ -444,11 +521,15 @@ export default function Rehabilitation() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-slate-500">授课老师</span>
-                    <span className="text-slate-700 font-medium">{course.teacher}</span>
+                    <span className="text-slate-700 font-medium">
+                      {course.teacher}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-slate-500">学员人数</span>
-                    <span className="text-slate-700 font-medium">{course.students}人</span>
+                    <span className="text-slate-700 font-medium">
+                      {course.students}人
+                    </span>
                   </div>
                   <div>
                     <div className="flex items-center justify-between mb-1 text-sm">
@@ -461,13 +542,17 @@ export default function Rehabilitation() {
                       <div
                         className={`h-full bg-gradient-to-r ${course.color} rounded-full`}
                         style={{
-                          width: `${(course.completedHours / course.totalHours) * 100}%`,
+                          width: `${
+                            (course.completedHours / course.totalHours) * 100
+                          }%`,
                         }}
                       />
                     </div>
                   </div>
                   <div className="flex gap-2 pt-2">
-                    <button className="flex-1 btn-secondary text-xs">查看详情</button>
+                    <button className="flex-1 btn-secondary text-xs">
+                      查看详情
+                    </button>
                     <button className="flex-1 btn-primary text-xs">
                       <CheckCircle className="w-3.5 h-3.5" />
                       考核
@@ -488,11 +573,154 @@ export default function Rehabilitation() {
 
             <div className="card">
               <h3 className="section-title">技能培训分布</h3>
-              <ReactECharts option={skillDistributionOption} style={{ height: 320 }} />
+              <ReactECharts
+                option={skillDistributionOption}
+                style={{ height: 320 }}
+              />
             </div>
           </div>
         </div>
       )}
+
+      <Modal
+        isOpen={trainingModalOpen}
+        onClose={() => setTrainingModalOpen(false)}
+        title={
+          trainingForm.type === "体能训练" ? "新增体能训练记录" : "新增技能培训记录"
+        }
+        width="max-w-xl"
+        footer={
+          <>
+            <button
+              className="btn-secondary"
+              onClick={() => setTrainingModalOpen(false)}
+            >
+              取消
+            </button>
+            <button
+              className="btn-primary"
+              onClick={handleAddTraining}
+              disabled={!trainingForm.detaineeId || !trainingForm.content}
+            >
+              <Check className="w-4 h-4" />
+              保存记录
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="form-label">
+              戒毒人员 <span className="text-warning-600">*</span>
+            </label>
+            <select
+              className="form-input"
+              value={trainingForm.detaineeId}
+              onChange={(e) =>
+                setTrainingForm({
+                  ...trainingForm,
+                  detaineeId: e.target.value,
+                })
+              }
+            >
+              <option value="">请选择戒毒人员</option>
+              {detainees.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name} - {d.idCard}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="form-label">
+                {trainingForm.type === "体能训练" ? "训练日期" : "培训日期"}
+              </label>
+              <input
+                type="date"
+                className="form-input"
+                value={trainingForm.date}
+                onChange={(e) =>
+                  setTrainingForm({ ...trainingForm, date: e.target.value })
+                }
+              />
+            </div>
+            <div>
+              <label className="form-label">
+                {trainingForm.type === "体能训练" ? "教练" : "授课老师"}
+              </label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="请输入姓名"
+                value={trainingForm.coach}
+                onChange={(e) =>
+                  setTrainingForm({ ...trainingForm, coach: e.target.value })
+                }
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="form-label">
+              {trainingForm.type === "体能训练" ? "训练内容" : "培训课程"}{" "}
+              <span className="text-warning-600">*</span>
+            </label>
+            <input
+              type="text"
+              className="form-input"
+              placeholder={
+                trainingForm.type === "体能训练"
+                  ? "如：晨跑、力量训练、球类运动"
+                  : "如：中式烹饪、美容美发、电工基础"
+              }
+              value={trainingForm.content}
+              onChange={(e) =>
+                setTrainingForm({ ...trainingForm, content: e.target.value })
+              }
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="form-label">
+                {trainingForm.type === "体能训练" ? "训练时长（分钟）" : "课时（分钟）"}
+              </label>
+              <input
+                type="number"
+                className="form-input"
+                value={trainingForm.duration}
+                onChange={(e) =>
+                  setTrainingForm({
+                    ...trainingForm,
+                    duration: parseInt(e.target.value) || 0,
+                  })
+                }
+              />
+            </div>
+            <div>
+              <label className="form-label">
+                {trainingForm.type === "体能训练" ? "表现评分" : "考核成绩"}：
+                {trainingForm.performance}
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer mt-2"
+                value={trainingForm.performance}
+                onChange={(e) =>
+                  setTrainingForm({
+                    ...trainingForm,
+                    performance: parseInt(e.target.value),
+                  })
+                }
+              />
+            </div>
+          </div>
+        </div>
+      </Modal>
     </PageContainer>
   );
 }

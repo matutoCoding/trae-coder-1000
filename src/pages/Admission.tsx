@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import ReactECharts from "echarts-for-react";
 import {
   UserPlus,
@@ -13,13 +13,19 @@ import {
   User,
   Calendar,
   MapPin,
+  X,
+  Save,
+  Check,
+  Eye,
 } from "lucide-react";
 import PageContainer from "@/components/PageContainer";
 import StatCard from "@/components/StatCard";
 import DataTable from "@/components/DataTable";
 import type { Column } from "@/components/DataTable";
 import StatusBadge from "@/components/StatusBadge";
-import { detainees } from "@/data/mock";
+import Modal from "@/components/Modal";
+import { useAppStore } from "@/store/useAppStore";
+import type { Detainee, HealthCheckup } from "@/types";
 
 const tabs = [
   { id: "list", label: "收治人员列表" },
@@ -30,13 +36,59 @@ const tabs = [
 export default function Admission() {
   const [activeTab, setActiveTab] = useState("list");
   const [searchText, setSearchText] = useState("");
+  const [registerStep, setRegisterStep] = useState(1);
+  const [showAdmitModal, setShowAdmitModal] = useState(false);
+  const [selectedDetainee, setSelectedDetainee] = useState<string | null>(null);
+  const [showCheckupModal, setShowCheckupModal] = useState(false);
 
-  const filteredDetainees = detainees.filter(
-    (d) =>
-      d.name.includes(searchText) ||
-      d.idCard.includes(searchText) ||
-      d.id.includes(searchText)
-  );
+  const { detainees, healthCheckups, addDetainee, addHealthCheckup } = useAppStore();
+
+  const [formData, setFormData] = useState({
+    name: "",
+    idCard: "",
+    gender: "男" as "男" | "女",
+    birthDate: "",
+    ethnicity: "汉族",
+    education: "高中",
+    address: "",
+    admitDate: new Date().toISOString().split("T")[0],
+    durationMonths: 24,
+    currentLevel: "一级" as Detainee["currentLevel"],
+    status: "正常" as Detainee["status"],
+  });
+
+  const [checkupForm, setCheckupForm] = useState({
+    detaineeId: "",
+    detaineeName: "",
+    checkDate: new Date().toISOString().split("T")[0],
+    height: 0,
+    weight: 0,
+    bloodPressure: "120/80",
+    heartRate: "75",
+    bloodType: "A型",
+    infectiousDisease: false,
+    dependenceLevel: 2 as 1 | 2 | 3 | 4,
+    notes: "",
+  });
+
+  const filteredDetainees = useMemo(() =>
+    detainees.filter(
+      (d) =>
+        d.name.includes(searchText) ||
+        d.idCard.includes(searchText) ||
+        d.id.includes(searchText)
+    ),
+  [detainees, searchText]);
+
+  const pendingCheckupCount = useMemo(() =>
+    detainees.filter((d) =>
+      !healthCheckups.some((h) => h.detaineeId === d.id)
+    ).length
+  , [detainees, healthCheckups]);
+
+  const completedCheckupCount = useMemo(() =>
+    healthCheckups.length
+  , [healthCheckups]);
 
   const columns: Column<typeof detainees[0]>[] = [
     { key: "id", title: "编号", width: "100px" },
@@ -118,6 +170,29 @@ export default function Admission() {
         </StatusBadge>
       ),
     },
+    {
+      key: "actions",
+      title: "操作",
+      width: "150px",
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => handleViewDetail(row.id)}
+            className="text-xs text-police-600 hover:text-police-700 flex items-center gap-1"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            详情
+          </button>
+          <button
+            onClick={() => handleAddCheckup(row.id, row.name)}
+            className="text-xs text-health-600 hover:text-health-700 flex items-center gap-1"
+          >
+            <Stethoscope className="w-3.5 h-3.5" />
+            体检
+          </button>
+        </div>
+      ),
+    },
   ];
 
   const admitTrendOption = {
@@ -138,7 +213,7 @@ export default function Admission() {
       {
         name: "收治人数",
         type: "bar",
-        data: [12, 18, 15, 22, 19, 25],
+        data: [12, 18, 15, 22, 19, detainees.length],
         itemStyle: {
           color: {
             type: "linear",
@@ -155,13 +230,75 @@ export default function Admission() {
     ],
   };
 
+  const handleViewDetail = (id: string) => {
+    setSelectedDetainee(id);
+    setShowAdmitModal(true);
+  };
+
+  const handleAddCheckup = (id: string, name: string) => {
+    setCheckupForm({
+      ...checkupForm,
+      detaineeId: id,
+      detaineeName: name,
+    });
+    setShowCheckupModal(true);
+  };
+
+  const handleSubmitAdmit = () => {
+    if (!formData.name || !formData.idCard) {
+      alert("请填写必填项：姓名和身份证号");
+      return;
+    }
+    addDetainee(formData);
+    setRegisterStep(1);
+    setFormData({
+      name: "",
+      idCard: "",
+      gender: "男",
+      birthDate: "",
+      ethnicity: "汉族",
+      education: "高中",
+      address: "",
+      admitDate: new Date().toISOString().split("T")[0],
+      durationMonths: 24,
+      currentLevel: "一级",
+      status: "正常",
+    });
+    setActiveTab("list");
+    alert("收治登记成功！");
+  };
+
+  const handleSubmitCheckup = () => {
+    if (!checkupForm.detaineeId) {
+      alert("请选择戒毒人员");
+      return;
+    }
+    const { detaineeName, ...checkupData } = checkupForm;
+    addHealthCheckup(checkupData as Omit<HealthCheckup, "id">);
+    setShowCheckupModal(false);
+    setCheckupForm({
+      detaineeId: "",
+      detaineeName: "",
+      checkDate: new Date().toISOString().split("T")[0],
+      height: 0,
+      weight: 0,
+      bloodPressure: "120/80",
+      heartRate: "75",
+      bloodType: "A型",
+      infectiousDisease: false,
+      dependenceLevel: 2,
+      notes: "",
+    });
+    alert("体检评估提交成功！");
+  };
+
   return (
     <PageContainer
       title="人员收治"
       subtitle="戒毒人员收治登记、信息管理与入所体检评估"
       breadcrumbs={[{ label: "人员收治" }]}
       actions={
-        <button className="btn-primary">
+        <button className="btn-primary" onClick={() => setActiveTab("register")}>
           <Plus className="w-4 h-4" />
           新增收治
         </button>
@@ -177,20 +314,20 @@ export default function Admission() {
         />
         <StatCard
           title="本月新增收治"
-          value="25"
+          value={detainees.filter((d) => d.admitDate.startsWith("2025-06")).length}
           icon={FileText}
           color="green"
           trend={{ value: 12, label: "环比" }}
         />
         <StatCard
           title="待体检人员"
-          value="6"
+          value={pendingCheckupCount}
           icon={Stethoscope}
           color="orange"
         />
         <StatCard
           title="已完成体检"
-          value="2"
+          value={completedCheckupCount}
           icon={ClipboardCheck}
           color="purple"
         />
@@ -224,7 +361,7 @@ export default function Admission() {
                       <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                       <input
                         type="text"
-                        placeholder="搜索..."
+                        placeholder="搜索姓名/身份证..."
                         value={searchText}
                         onChange={(e) => setSearchText(e.target.value)}
                         className="pl-9 pr-4 py-2 w-48 text-sm border border-slate-200 rounded-sm focus:outline-none focus:ring-2 focus:ring-police-500"
@@ -254,102 +391,262 @@ export default function Admission() {
 
       {activeTab === "register" && (
         <div className="card">
-          <div className="flex items-center gap-4 mb-6">
+          <div className="flex items-center justify-center gap-4 mb-8">
             {["基本信息", "收治依据", "审批确认"].map((step, index) => (
               <div key={step} className="flex items-center gap-2">
                 <div
                   className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                    index === 0
+                    registerStep > index
+                      ? "bg-health-500 text-white"
+                      : registerStep === index + 1
                       ? "bg-police-600 text-white"
                       : "bg-slate-100 text-slate-500"
                   }`}
                 >
-                  {index + 1}
+                  {registerStep > index ? <Check className="w-4 h-4" /> : index + 1}
                 </div>
                 <span
                   className={`text-sm ${
-                    index === 0 ? "text-police-600 font-medium" : "text-slate-500"
+                    registerStep >= index + 1
+                      ? "text-police-600 font-medium"
+                      : "text-slate-500"
                   }`}
                 >
                   {step}
                 </span>
-                {index < 2 && <div className="w-12 h-px bg-slate-200" />}
+                {index < 2 && (
+                  <div
+                    className={`w-16 h-0.5 ${
+                      registerStep > index ? "bg-health-500" : "bg-slate-200"
+                    }`}
+                  />
+                )}
               </div>
             ))}
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            <div className="lg:col-span-1">
-              <div className="border-2 border-dashed border-slate-200 rounded-sm p-6 text-center">
-                <div className="w-32 h-40 mx-auto bg-slate-50 rounded-sm flex flex-col items-center justify-center mb-4">
-                  <Camera className="w-10 h-10 text-slate-300 mb-2" />
-                  <p className="text-xs text-slate-400">证件照片</p>
-                </div>
-                <button className="btn-secondary w-full">
-                  <Upload className="w-4 h-4" />
-                  上传照片
-                </button>
-              </div>
-            </div>
-
-            <div className="lg:col-span-3 space-y-6">
-              <h4 className="section-title text-sm border-b pb-2">基本信息</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="label">姓名 *</label>
-                  <input type="text" className="input" placeholder="请输入姓名" />
-                </div>
-                <div>
-                  <label className="label">身份证号 *</label>
-                  <input type="text" className="input" placeholder="请输入身份证号" />
-                </div>
-                <div>
-                  <label className="label">性别 *</label>
-                  <select className="select">
-                    <option>男</option>
-                    <option>女</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="label">出生日期</label>
-                  <input type="date" className="input" />
-                </div>
-                <div>
-                  <label className="label">民族</label>
-                  <input type="text" className="input" placeholder="请输入民族" defaultValue="汉族" />
-                </div>
-                <div>
-                  <label className="label">文化程度</label>
-                  <select className="select">
-                    <option>小学</option>
-                    <option>初中</option>
-                    <option>高中/中专</option>
-                    <option>大专</option>
-                    <option>本科及以上</option>
-                  </select>
-                </div>
-                <div className="md:col-span-2">
-                  <label className="label">户籍地址</label>
-                  <input type="text" className="input" placeholder="请输入户籍地址" />
-                </div>
-                <div>
-                  <label className="label">入所日期 *</label>
-                  <input type="date" className="input" />
-                </div>
-                <div>
-                  <label className="label">戒毒期限（月）</label>
-                  <input type="number" className="input" placeholder="请输入期限" defaultValue="24" />
+          {registerStep === 1 && (
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+              <div className="lg:col-span-1">
+                <div className="border-2 border-dashed border-slate-200 rounded-sm p-6 text-center">
+                  <div className="w-32 h-40 mx-auto bg-slate-50 rounded-sm flex flex-col items-center justify-center mb-4">
+                    <Camera className="w-10 h-10 text-slate-300 mb-2" />
+                    <p className="text-xs text-slate-400">证件照片</p>
+                  </div>
+                  <button className="btn-secondary w-full">
+                    <Upload className="w-4 h-4" />
+                    上传照片
+                  </button>
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-4">
-                <button className="btn-primary">
-                  <FileText className="w-4 h-4" />
-                  保存并下一步
-                </button>
-                <button className="btn-secondary">暂存草稿</button>
+              <div className="lg:col-span-3 space-y-4">
+                <h4 className="section-title text-sm border-b pb-2 mb-4">基本信息</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="label">姓名 *</label>
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="请输入姓名"
+                      value={formData.name}
+                      onChange={(e) =>
+                        setFormData({ ...formData, name: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="label">身份证号 *</label>
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="请输入身份证号"
+                      value={formData.idCard}
+                      onChange={(e) =>
+                        setFormData({ ...formData, idCard: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="label">性别 *</label>
+                    <select
+                      className="select"
+                      value={formData.gender}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          gender: e.target.value as "男" | "女",
+                        })
+                      }
+                    >
+                      <option value="男">男</option>
+                      <option value="女">女</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label">出生日期</label>
+                    <input
+                      type="date"
+                      className="input"
+                      value={formData.birthDate}
+                      onChange={(e) =>
+                        setFormData({ ...formData, birthDate: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="label">民族</label>
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="请输入民族"
+                      value={formData.ethnicity}
+                      onChange={(e) =>
+                        setFormData({ ...formData, ethnicity: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="label">文化程度</label>
+                    <select
+                      className="select"
+                      value={formData.education}
+                      onChange={(e) =>
+                        setFormData({ ...formData, education: e.target.value })
+                      }
+                    >
+                      <option>小学</option>
+                      <option>初中</option>
+                      <option>高中</option>
+                      <option>中专</option>
+                      <option>大专</option>
+                      <option>本科</option>
+                      <option>研究生及以上</option>
+                    </select>
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="label">户籍地址</label>
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="请输入户籍地址"
+                      value={formData.address}
+                      onChange={(e) =>
+                        setFormData({ ...formData, address: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="label">入所日期 *</label>
+                    <input
+                      type="date"
+                      className="input"
+                      value={formData.admitDate}
+                      onChange={(e) =>
+                        setFormData({ ...formData, admitDate: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="label">戒毒期限（月）</label>
+                    <input
+                      type="number"
+                      className="input"
+                      placeholder="请输入期限"
+                      value={formData.durationMonths}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          durationMonths: parseInt(e.target.value) || 0,
+                        })
+                      }
+                    />
+                  </div>
+                </div>
               </div>
             </div>
+          )}
+
+          {registerStep === 2 && (
+            <div className="max-w-2xl mx-auto space-y-4">
+              <h4 className="section-title text-sm border-b pb-2">收治依据</h4>
+              <div className="space-y-4">
+                <div>
+                  <label className="label">强制隔离戒毒决定书编号</label>
+                  <input type="text" className="input" placeholder="请输入决定书编号" />
+                </div>
+                <div>
+                  <label className="label">决定机关</label>
+                  <input type="text" className="input" placeholder="请输入决定机关" defaultValue="XX市公安局" />
+                </div>
+                <div>
+                  <label className="label">决定日期</label>
+                  <input type="date" className="input" />
+                </div>
+                <div>
+                  <label className="label">法律文书</label>
+                  <div className="border-2 border-dashed border-slate-200 rounded-sm p-6 text-center">
+                    <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                    <p className="text-sm text-slate-500">点击或拖拽上传法律文书</p>
+                    <p className="text-xs text-slate-400 mt-1">支持 PDF、JPG、PNG 格式</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {registerStep === 3 && (
+            <div className="max-w-md mx-auto text-center py-8">
+              <div className="w-20 h-20 mx-auto bg-health-50 rounded-full flex items-center justify-center mb-4">
+                <FileText className="w-10 h-10 text-health-600" />
+              </div>
+              <h4 className="text-lg font-semibold text-slate-800 mb-2">确认收治登记</h4>
+              <p className="text-sm text-slate-500 mb-6">
+                请确认以上信息无误，提交后将进入审批流程
+              </p>
+              <div className="bg-slate-50 rounded-sm p-4 text-left space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">姓名</span>
+                  <span className="font-medium text-slate-800">{formData.name || "-"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">身份证号</span>
+                  <span className="font-medium text-slate-800">{formData.idCard || "-"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">入所日期</span>
+                  <span className="font-medium text-slate-800">{formData.admitDate || "-"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">戒毒期限</span>
+                  <span className="font-medium text-slate-800">{formData.durationMonths}个月</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-center gap-3 pt-6 mt-6 border-t border-slate-100">
+            {registerStep > 1 && (
+              <button
+                className="btn-secondary"
+                onClick={() => setRegisterStep(registerStep - 1)}
+              >
+                上一步
+              </button>
+            )}
+            {registerStep < 3 ? (
+              <button
+                className="btn-primary"
+                onClick={() => setRegisterStep(registerStep + 1)}
+              >
+                下一步
+              </button>
+            ) : (
+              <button className="btn-primary" onClick={handleSubmitAdmit}>
+                <Save className="w-4 h-4" />
+                提交收治登记
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -357,19 +654,40 @@ export default function Admission() {
       {activeTab === "checkup" && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="card">
-            <h3 className="section-title">体检项目</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="section-title mb-0">体检项目</h3>
+              <select
+                className="select w-48"
+                value={checkupForm.detaineeId}
+                onChange={(e) => {
+                  const detainee = detainees.find((d) => d.id === e.target.value);
+                  setCheckupForm({
+                    ...checkupForm,
+                    detaineeId: e.target.value,
+                    detaineeName: detainee?.name || "",
+                  });
+                }}
+              >
+                <option value="">选择戒毒人员</option>
+                {detainees.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}（{d.id}）
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="space-y-3">
               {[
-                { name: "身高体重检查", status: "completed", result: "身高175cm，体重68kg" },
-                { name: "血压心率测量", status: "completed", result: "血压120/80mmHg，心率78次/分" },
-                { name: "血液常规检测", status: "completed", result: "各项指标正常" },
-                { name: "传染病筛查", status: "pending", result: "-" },
-                { name: "毒品依赖评估", status: "pending", result: "-" },
-                { name: "胸部X光检查", status: "pending", result: "-" },
-                { name: "心电图检查", status: "pending", result: "-" },
+                { name: "身高体重检查", key: "height", status: "completed" },
+                { name: "血压心率测量", key: "vital", status: "completed" },
+                { name: "血液常规检测", key: "blood", status: "pending" },
+                { name: "传染病筛查", key: "infectious", status: "pending" },
+                { name: "毒品依赖评估", key: "dependence", status: "pending" },
+                { name: "胸部X光检查", key: "xray", status: "pending" },
+                { name: "心电图检查", key: "ecg", status: "pending" },
               ].map((item, index) => (
                 <div
-                  key={index}
+                  key={item.key}
                   className="flex items-center justify-between p-3 bg-slate-50 rounded-sm"
                 >
                   <div className="flex items-center gap-3">
@@ -388,7 +706,6 @@ export default function Admission() {
                     </div>
                     <div>
                       <p className="text-sm font-medium text-slate-800">{item.name}</p>
-                      <p className="text-xs text-slate-500">{item.result}</p>
                     </div>
                   </div>
                   <StatusBadge
@@ -402,59 +719,133 @@ export default function Admission() {
           </div>
 
           <div className="card">
-            <h3 className="section-title">依赖程度评估</h3>
+            <h3 className="section-title">健康检查评估</h3>
             <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">身高 (cm)</label>
+                  <input
+                    type="number"
+                    className="input"
+                    value={checkupForm.height}
+                    onChange={(e) =>
+                      setCheckupForm({
+                        ...checkupForm,
+                        height: parseFloat(e.target.value) || 0,
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="label">体重 (kg)</label>
+                  <input
+                    type="number"
+                    className="input"
+                    value={checkupForm.weight}
+                    onChange={(e) =>
+                      setCheckupForm({
+                        ...checkupForm,
+                        weight: parseFloat(e.target.value) || 0,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">血压</label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={checkupForm.bloodPressure}
+                    onChange={(e) =>
+                      setCheckupForm({ ...checkupForm, bloodPressure: e.target.value })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="label">心率 (次/分)</label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={checkupForm.heartRate}
+                    onChange={(e) =>
+                      setCheckupForm({ ...checkupForm, heartRate: e.target.value })
+                    }
+                  />
+                </div>
+              </div>
               <div>
-                <label className="label">吸毒史年限</label>
-                <select className="select">
-                  <option>1年以下</option>
-                  <option>1-3年</option>
-                  <option>3-5年</option>
-                  <option>5年以上</option>
+                <label className="label">血型</label>
+                <select
+                  className="select"
+                  value={checkupForm.bloodType}
+                  onChange={(e) =>
+                    setCheckupForm({ ...checkupForm, bloodType: e.target.value })
+                  }
+                >
+                  <option>A型</option>
+                  <option>B型</option>
+                  <option>AB型</option>
+                  <option>O型</option>
                 </select>
               </div>
               <div>
-                <label className="label">主要毒品类型</label>
-                <select className="select">
-                  <option>海洛因</option>
-                  <option>冰毒</option>
-                  <option>麻古</option>
-                  <option>摇头丸</option>
-                  <option>K粉</option>
-                  <option>其他</option>
-                </select>
+                <label className="label">传染病筛查</label>
+                <div className="flex items-center gap-2 mt-2">
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4"
+                    checked={checkupForm.infectiousDisease}
+                    onChange={(e) =>
+                      setCheckupForm({
+                        ...checkupForm,
+                        infectiousDisease: e.target.checked,
+                      })
+                    }
+                  />
+                  <span className="text-sm text-slate-700">检出传染病</span>
+                </div>
               </div>
               <div>
-                <label className="label">日均吸食量</label>
-                <input type="text" className="input" placeholder="请输入日均吸食量" />
-              </div>
-              <div>
-                <label className="label">吸食方式</label>
-                <div className="flex gap-4 mt-2">
-                  {["烟吸", "鼻吸", "口服", "注射"].map((t) => (
-                    <label key={t} className="flex items-center gap-2 text-sm">
-                      <input type="checkbox" className="w-4 h-4 rounded border-slate-300" />
-                      {t}
+                <label className="label">依赖程度等级</label>
+                <div className="flex gap-2 mt-2">
+                  {[1, 2, 3, 4].map((level) => (
+                    <label
+                      key={level}
+                      className={`flex-1 text-center py-2 rounded-sm cursor-pointer border text-sm ${
+                        checkupForm.dependenceLevel === level
+                          ? "bg-police-50 border-police-500 text-police-700"
+                          : "border-slate-200 hover:border-slate-300"
+                      }`}
+                      onClick={() =>
+                        setCheckupForm({
+                          ...checkupForm,
+                          dependenceLevel: level as 1 | 2 | 3 | 4,
+                        })
+                      }
+                    >
+                      {level}级
                     </label>
                   ))}
                 </div>
               </div>
               <div>
-                <label className="label">既往脱毒次数</label>
-                <input type="number" className="input" placeholder="请输入次数" />
-              </div>
-              <div>
-                <label className="label">评估意见</label>
+                <label className="label">医生评估意见</label>
                 <textarea
                   className="textarea"
                   rows={4}
                   placeholder="请填写医生评估意见"
+                  value={checkupForm.notes}
+                  onChange={(e) =>
+                    setCheckupForm({ ...checkupForm, notes: e.target.value })
+                  }
                 />
               </div>
               <div className="flex gap-3">
-                <button className="btn-primary">
+                <button className="btn-primary flex-1" onClick={handleSubmitCheckup}>
                   <Stethoscope className="w-4 h-4" />
-                  提交评估
+                  提交体检评估
                 </button>
                 <button className="btn-secondary">打印体检报告</button>
               </div>
@@ -462,6 +853,128 @@ export default function Admission() {
           </div>
         </div>
       )}
+
+      {/* 体检弹窗 */}
+      <Modal
+        isOpen={showCheckupModal}
+        onClose={() => setShowCheckupModal(false)}
+        title="入所体检登记"
+        width="max-w-lg"
+        footer={
+          <>
+            <button
+              className="btn-secondary"
+              onClick={() => setShowCheckupModal(false)}
+            >
+              取消
+            </button>
+            <button className="btn-primary" onClick={handleSubmitCheckup}>
+              <Save className="w-4 h-4" />
+              保存
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="bg-police-50 p-3 rounded-sm">
+            <p className="text-sm font-medium text-police-800">
+              戒毒人员：{checkupForm.detaineeName || "-"}
+            </p>
+            <p className="text-xs text-police-600 mt-1">
+              体检日期：{checkupForm.checkDate}
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">身高 (cm)</label>
+              <input
+                type="number"
+                className="input"
+                value={checkupForm.height || ""}
+                onChange={(e) =>
+                  setCheckupForm({
+                    ...checkupForm,
+                    height: parseFloat(e.target.value) || 0,
+                  })
+                }
+              />
+            </div>
+            <div>
+              <label className="label">体重 (kg)</label>
+              <input
+                type="number"
+                className="input"
+                value={checkupForm.weight || ""}
+                onChange={(e) =>
+                  setCheckupForm({
+                    ...checkupForm,
+                    weight: parseFloat(e.target.value) || 0,
+                  })
+                }
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">血压</label>
+              <input
+                type="text"
+                className="input"
+                value={checkupForm.bloodPressure}
+                onChange={(e) =>
+                  setCheckupForm({ ...checkupForm, bloodPressure: e.target.value })
+                }
+              />
+            </div>
+            <div>
+              <label className="label">心率</label>
+              <input
+                type="text"
+                className="input"
+                value={checkupForm.heartRate}
+                onChange={(e) =>
+                  setCheckupForm({ ...checkupForm, heartRate: e.target.value })
+                }
+              />
+            </div>
+          </div>
+          <div>
+            <label className="label">依赖程度等级</label>
+            <div className="flex gap-2 mt-2">
+              {[1, 2, 3, 4].map((level) => (
+                <button
+                  key={level}
+                  className={`flex-1 py-2 text-sm rounded-sm border transition-colors ${
+                    checkupForm.dependenceLevel === level
+                      ? "bg-police-50 border-police-500 text-police-700 font-medium"
+                      : "border-slate-200 hover:border-slate-300 text-slate-600"
+                  }`}
+                  onClick={() =>
+                    setCheckupForm({
+                      ...checkupForm,
+                      dependenceLevel: level as 1 | 2 | 3 | 4,
+                    })
+                  }
+                >
+                  {level}级
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="label">评估意见</label>
+            <textarea
+              className="textarea"
+              rows={3}
+              placeholder="请填写医生评估意见"
+              value={checkupForm.notes}
+              onChange={(e) =>
+                setCheckupForm({ ...checkupForm, notes: e.target.value })
+              }
+            />
+          </div>
+        </div>
+      </Modal>
     </PageContainer>
   );
 }

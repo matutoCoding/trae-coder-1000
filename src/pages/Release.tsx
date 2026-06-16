@@ -15,13 +15,16 @@ import {
   Clock,
   FileText,
   ArrowRight,
+  Check,
 } from "lucide-react";
 import PageContainer from "@/components/PageContainer";
 import StatCard from "@/components/StatCard";
 import DataTable from "@/components/DataTable";
 import type { Column } from "@/components/DataTable";
 import StatusBadge from "@/components/StatusBadge";
-import { releases, aftercareRecords } from "@/data/mock";
+import Modal from "@/components/Modal";
+import { useAppStore } from "@/store/useAppStore";
+import type { Release, AftercareRecord } from "@/types";
 
 const tabs = [
   { id: "release", label: "期满解除" },
@@ -30,8 +33,96 @@ const tabs = [
 
 export default function Release() {
   const [activeTab, setActiveTab] = useState("release");
+  const [releaseModalOpen, setReleaseModalOpen] = useState(false);
+  const [aftercareModalOpen, setAftercareModalOpen] = useState(false);
+  const [selectedRelease, setSelectedRelease] = useState<Release | null>(null);
+  const [releaseDetailModalOpen, setReleaseDetailModalOpen] = useState(false);
 
-  const releaseColumns: Column<typeof releases[0]>[] = [
+  const {
+    detainees,
+    releases,
+    aftercareRecords,
+    addRelease,
+    updateReleaseStatus,
+    addAftercareRecord,
+  } = useAppStore();
+
+  const [releaseForm, setReleaseForm] = useState({
+    detaineeId: "",
+    releaseDate: "",
+    assessmentResult: "",
+    destination: "",
+    contact: "",
+    status: "待审批" as Release["status"],
+  });
+
+  const [aftercareForm, setAftercareForm] = useState({
+    detaineeId: "",
+    date: new Date().toISOString().split("T")[0],
+    type: "回访记录" as AftercareRecord["type"],
+    content: "",
+    contact: "",
+    result: "",
+  });
+
+  const pendingRelease = releases.filter((r) => r.status === "待审批").length;
+
+  const handleAddRelease = () => {
+    if (!releaseForm.detaineeId) return;
+    const detainee = detainees.find((d) => d.id === releaseForm.detaineeId);
+    if (!detainee) return;
+
+    addRelease({
+      ...releaseForm,
+      detaineeName: detainee.name,
+    } as Omit<Release, "id">);
+
+    setReleaseForm({
+      detaineeId: "",
+      releaseDate: "",
+      assessmentResult: "",
+      destination: "",
+      contact: "",
+      status: "待审批",
+    });
+    setReleaseModalOpen(false);
+  };
+
+  const handleApproveRelease = (id: string) => {
+    updateReleaseStatus(id, "已批准");
+  };
+
+  const handleCompleteRelease = (id: string) => {
+    updateReleaseStatus(id, "已解除");
+  };
+
+  const handleAddAftercare = () => {
+    if (!aftercareForm.detaineeId || !aftercareForm.content) return;
+    const detainee = detainees.find((d) => d.id === aftercareForm.detaineeId);
+    if (!detainee) return;
+
+    addAftercareRecord({
+      ...aftercareForm,
+      detaineeName: detainee.name,
+    } as Omit<AftercareRecord, "id">);
+
+    setAftercareForm({
+      detaineeId: "",
+      date: new Date().toISOString().split("T")[0],
+      type: "回访记录",
+      content: "",
+      contact: "",
+      result: "",
+    });
+    setAftercareModalOpen(false);
+  };
+
+  const openReleaseDetail = (release: Release) => {
+    setSelectedRelease(release);
+    setReleaseDetailModalOpen(true);
+  };
+
+  const releaseColumns: Column<Release>[] = [
     {
       key: "detaineeName",
       title: "姓名",
@@ -56,7 +147,7 @@ export default function Release() {
         </div>
       ),
     },
-    { key: "assessmentResult", title: "出所鉴定", width: "300px" },
+    { key: "assessmentResult", title: "出所鉴定", width: "200px" },
     {
       key: "destination",
       title: "安置去向",
@@ -90,9 +181,40 @@ export default function Release() {
         </StatusBadge>
       ),
     },
+    {
+      key: "action",
+      title: "操作",
+      width: "160px",
+      render: (row) => (
+        <div className="flex gap-2">
+          <button
+            className="text-xs text-slate-600 hover:text-slate-800 font-medium"
+            onClick={() => openReleaseDetail(row)}
+          >
+            详情
+          </button>
+          {row.status === "待审批" && (
+            <button
+              className="text-xs text-health-600 hover:text-health-700 font-medium"
+              onClick={() => handleApproveRelease(row.id)}
+            >
+              批准
+            </button>
+          )}
+          {row.status === "已批准" && (
+            <button
+              className="text-xs text-police-600 hover:text-police-700 font-medium"
+              onClick={() => handleCompleteRelease(row.id)}
+            >
+              办理解除
+            </button>
+          )}
+        </div>
+      ),
+    },
   ];
 
-  const aftercareColumns: Column<typeof aftercareRecords[0]>[] = [
+  const aftercareColumns: Column<AftercareRecord>[] = [
     { key: "date", title: "日期", width: "120px" },
     {
       key: "detaineeName",
@@ -160,7 +282,7 @@ export default function Release() {
         name: "解除人数",
         type: "line",
         smooth: true,
-        data: [8, 12, 10, 15, 13, 18],
+        data: [8, 12, 10, 15, 13, releases.length],
         itemStyle: { color: "#065f46" },
         lineStyle: { color: "#065f46", width: 3 },
         symbol: "circle",
@@ -168,7 +290,10 @@ export default function Release() {
         areaStyle: {
           color: {
             type: "linear",
-            x: 0, y: 0, x2: 0, y2: 1,
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
             colorStops: [
               { offset: 0, color: "rgba(6, 95, 70, 0.25)" },
               { offset: 1, color: "rgba(6, 95, 70, 0.02)" },
@@ -180,7 +305,7 @@ export default function Release() {
         name: "后续衔接",
         type: "line",
         smooth: true,
-        data: [7, 11, 10, 14, 12, 17],
+        data: [7, 11, 10, 14, 12, aftercareRecords.length],
         itemStyle: { color: "#1e40af" },
         lineStyle: { color: "#1e40af", width: 3 },
         symbol: "circle",
@@ -200,16 +325,50 @@ export default function Release() {
         itemStyle: { borderRadius: 4, borderColor: "#fff", borderWidth: 2 },
         label: { formatter: "{b}\n{c}", fontSize: 11 },
         data: [
-          { value: 86, name: "社区对接", itemStyle: { color: "#1e40af" } },
-          { value: 72, name: "回访记录", itemStyle: { color: "#065f46" } },
-          { value: 12, name: "复吸干预", itemStyle: { color: "#dc2626" } },
-          { value: 35, name: "帮扶救助", itemStyle: { color: "#d97706" } },
+          {
+            value: aftercareRecords.filter((a) => a.type === "社区对接").length,
+            name: "社区对接",
+            itemStyle: { color: "#1e40af" },
+          },
+          {
+            value: aftercareRecords.filter((a) => a.type === "回访记录").length,
+            name: "回访记录",
+            itemStyle: { color: "#065f46" },
+          },
+          {
+            value: aftercareRecords.filter((a) => a.type === "复吸干预").length,
+            name: "复吸干预",
+            itemStyle: { color: "#dc2626" },
+          },
+          {
+            value: aftercareRecords.filter((a) => a.type === "帮扶救助").length,
+            name: "帮扶救助",
+            itemStyle: { color: "#d97706" },
+          },
         ],
       },
     ],
   };
 
-  const pendingRelease = releases.filter((r) => r.status === "待审批").length;
+  const aftercareTimelineData = aftercareRecords
+    .slice()
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 8);
+
+  const getTagType = (type: string) => {
+    switch (type) {
+      case "社区对接":
+        return "blue" as const;
+      case "回访记录":
+        return "info" as const;
+      case "复吸干预":
+        return "danger" as const;
+      case "帮扶救助":
+        return "success" as const;
+      default:
+        return "default" as const;
+    }
+  };
 
   return (
     <PageContainer
@@ -222,9 +381,16 @@ export default function Release() {
             <Download className="w-4 h-4" />
             批量导出
           </button>
-          <button className="btn-primary">
+          <button
+            className="btn-primary"
+            onClick={() =>
+              activeTab === "release"
+                ? setReleaseModalOpen(true)
+                : setAftercareModalOpen(true)
+            }
+          >
             <Plus className="w-4 h-4" />
-            解除登记
+            {activeTab === "release" ? "解除登记" : "新增照管记录"}
           </button>
         </div>
       }
@@ -232,7 +398,7 @@ export default function Release() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="本月解除人数"
-          value="18"
+          value={releases.filter((r) => r.status === "已解除").length}
           icon={LogOut}
           color="green"
           trend={{ value: 15, label: "环比" }}
@@ -245,13 +411,13 @@ export default function Release() {
         />
         <StatCard
           title="后续照管中"
-          value="86"
+          value={aftercareRecords.length}
           icon={HandHeart}
           color="blue"
         />
         <StatCard
           title="复吸预警"
-          value="3"
+          value={aftercareRecords.filter((a) => a.type === "复吸干预").length}
           icon={AlertTriangle}
           color="red"
         />
@@ -278,7 +444,11 @@ export default function Release() {
           <div className="lg:col-span-2 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {releases.map((release) => (
-                <div key={release.id} className="card card-hover">
+                <div
+                  key={release.id}
+                  className="card card-hover cursor-pointer"
+                  onClick={() => openReleaseDetail(release)}
+                >
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 rounded-full bg-gradient-to-br from-police-500 to-police-700 flex items-center justify-center">
@@ -310,7 +480,7 @@ export default function Release() {
                   </div>
 
                   <div className="space-y-2 mb-4">
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                       {["收治登记", "生理脱毒", "心理矫治", "康复训练", "出所鉴定"].map(
                         (step, index) => (
                           <div key={step} className="flex items-center gap-1">
@@ -329,7 +499,9 @@ export default function Release() {
                                 <Clock className="w-3 h-3" />
                               )}
                             </div>
-                            {index < 4 && <ArrowRight className="w-3 h-3 text-slate-300" />}
+                            {index < 4 && (
+                              <ArrowRight className="w-3 h-3 text-slate-300" />
+                            )}
                           </div>
                         )
                       )}
@@ -395,12 +567,16 @@ export default function Release() {
                         <User className="w-4 h-4 text-health-700" />
                       </div>
                       <div>
-                        <p className="font-medium text-sm text-slate-800">{item.name}</p>
+                        <p className="font-medium text-sm text-slate-800">
+                          {item.name}
+                        </p>
                         <p className="text-xs text-slate-500">{item.date}</p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-lg font-semibold text-health-700">{item.days}</p>
+                      <p className="text-lg font-semibold text-health-700">
+                        {item.days}
+                      </p>
                       <p className="text-xs text-slate-500">天后解除</p>
                     </div>
                   </div>
@@ -464,66 +640,48 @@ export default function Release() {
             <div className="card">
               <h3 className="section-title">跟踪回访时间线</h3>
               <div className="space-y-6 py-2">
-                {[
-                  {
-                    date: "2025-07-10",
-                    title: "社区对接完成",
-                    type: "社区对接",
-                    desc: "与杭州市西湖区XX街道司法所完成对接，移交相关档案材料，社区同意接收并安排后续照管。",
-                    contact: "司法所王主任：13900139000",
-                    tagType: "blue" as const,
-                  },
-                  {
-                    date: "2025-07-12",
-                    title: "出所前回访",
-                    type: "回访记录",
-                    desc: "出所前最后一次回访，了解其出所计划和心理准备情况。状态积极，对未来生活有明确规划。",
-                    contact: "陈静本人",
-                    tagType: "info" as const,
-                  },
-                  {
-                    date: "2025-07-20",
-                    title: "首次社区尿检",
-                    type: "复吸干预",
-                    desc: "出所后首次社区监督尿检，检测结果为阴性，状态良好。",
-                    contact: "社区民警",
-                    tagType: "success" as const,
-                  },
-                  {
-                    date: "2025-08-05",
-                    title: "就业帮扶对接",
-                    type: "帮扶救助",
-                    desc: "联系XX企业联盟，推荐参加美容美发岗位面试，企业表示愿意接收。",
-                    contact: "XX企业联盟",
-                    tagType: "success" as const,
-                  },
-                ].map((item, index) => (
-                  <div key={index} className="flex gap-4">
-                    <div className="relative">
-                      <div className="w-10 h-10 bg-police-50 rounded-full flex items-center justify-center">
-                        <HandHeart className="w-5 h-5 text-police-600" />
+                {aftercareTimelineData.length > 0 ? (
+                  aftercareTimelineData.map((record, index) => (
+                    <div key={record.id} className="flex gap-4">
+                      <div className="relative">
+                        <div className="w-10 h-10 bg-police-50 rounded-full flex items-center justify-center">
+                          <HandHeart className="w-5 h-5 text-police-600" />
+                        </div>
+                        {index < aftercareTimelineData.length - 1 && (
+                          <div className="absolute top-11 left-1/2 -translate-x-1/2 w-0.5 h-full bg-slate-200" />
+                        )}
                       </div>
-                      {index < 3 && (
-                        <div className="absolute top-11 left-1/2 -translate-x-1/2 w-0.5 h-full bg-slate-200" />
-                      )}
-                    </div>
-                    <div className="flex-1 pb-6">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h4 className="font-medium text-slate-800">{item.title}</h4>
-                        <StatusBadge type={item.tagType}>{item.type}</StatusBadge>
+                      <div className="flex-1 pb-6">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="font-medium text-slate-800">
+                            {record.detaineeName} - {record.type}
+                          </h4>
+                          <StatusBadge type={getTagType(record.type)}>
+                            {record.type}
+                          </StatusBadge>
+                        </div>
+                        <p className="text-xs text-slate-500 mb-2 flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          {record.date}
+                        </p>
+                        <p className="text-sm text-slate-600 mb-2">{record.content}</p>
+                        {record.result && (
+                          <p className="text-xs text-health-600 bg-health-50 px-2 py-1 rounded-sm inline-block">
+                            结果：{record.result}
+                          </p>
+                        )}
+                        <p className="text-xs text-slate-500 flex items-center gap-1 mt-2">
+                          <Phone className="w-3 h-3" />
+                          {record.contact}
+                        </p>
                       </div>
-                      <p className="text-xs text-slate-500 mb-2 flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />
-                        {item.date}
-                      </p>
-                      <p className="text-sm text-slate-600 mb-2">{item.desc}</p>
-                      <p className="text-xs text-slate-500 flex items-center gap-1">
-                        <Phone className="w-3 h-3" />
-                        {item.contact}
-                      </p>
                     </div>
+                  ))
+                ) : (
+                  <div className="text-center py-12 text-slate-400">
+                    暂无后续照管记录
                   </div>
-                ))}
+                )}
               </div>
             </div>
           </div>
@@ -538,14 +696,31 @@ export default function Release() {
               <h3 className="section-title">复吸风险预警</h3>
               <div className="space-y-3">
                 {[
-                  { name: "张XX", risk: "高风险", days: "出所30天", lastTest: "检测阴性" },
-                  { name: "李XX", risk: "中风险", days: "出所15天", lastTest: "检测阴性" },
-                  { name: "王XX", risk: "中风险", days: "出所45天", lastTest: "待检测" },
+                  {
+                    name: "张XX",
+                    risk: "高风险",
+                    days: "出所30天",
+                    lastTest: "检测阴性",
+                  },
+                  {
+                    name: "李XX",
+                    risk: "中风险",
+                    days: "出所15天",
+                    lastTest: "检测阴性",
+                  },
+                  {
+                    name: "王XX",
+                    risk: "中风险",
+                    days: "出所45天",
+                    lastTest: "待检测",
+                  },
                 ].map((item, index) => (
                   <div
                     key={index}
                     className={`p-3 rounded-sm flex items-center gap-3 ${
-                      item.risk === "高风险" ? "bg-warning-50 border border-warning-100" : "bg-amber-50 border border-amber-100"
+                      item.risk === "高风险"
+                        ? "bg-warning-50 border border-warning-100"
+                        : "bg-amber-50 border border-amber-100"
                     }`}
                   >
                     <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center">
@@ -553,12 +728,18 @@ export default function Release() {
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center justify-between mb-0.5">
-                        <span className="font-medium text-sm text-slate-800">{item.name}</span>
-                        <StatusBadge type={item.risk === "高风险" ? "danger" : "warning"}>
+                        <span className="font-medium text-sm text-slate-800">
+                          {item.name}
+                        </span>
+                        <StatusBadge
+                          type={item.risk === "高风险" ? "danger" : "warning"}
+                        >
                           {item.risk}
                         </StatusBadge>
                       </div>
-                      <p className="text-xs text-slate-500">{item.days} · {item.lastTest}</p>
+                      <p className="text-xs text-slate-500">
+                        {item.days} · {item.lastTest}
+                      </p>
                     </div>
                   </div>
                 ))}
@@ -569,17 +750,35 @@ export default function Release() {
               <h3 className="section-title">照管资源链接</h3>
               <div className="space-y-2">
                 {[
-                  { name: "XX市禁毒办", desc: "官方禁毒服务热线", phone: "0XX-12345678" },
-                  { name: "XX心理咨询热线", desc: "24小时心理援助", phone: "400-XXX-XXXX" },
-                  { name: "XX就业帮扶中心", desc: "职业介绍与培训", phone: "0XX-87654321" },
-                  { name: "XX社区康复中心", desc: "社区戒毒康复服务", phone: "0XX-11223344" },
+                  {
+                    name: "XX市禁毒办",
+                    desc: "官方禁毒服务热线",
+                    phone: "0XX-12345678",
+                  },
+                  {
+                    name: "XX心理咨询热线",
+                    desc: "24小时心理援助",
+                    phone: "400-XXX-XXXX",
+                  },
+                  {
+                    name: "XX就业帮扶中心",
+                    desc: "职业介绍与培训",
+                    phone: "0XX-87654321",
+                  },
+                  {
+                    name: "XX社区康复中心",
+                    desc: "社区戒毒康复服务",
+                    phone: "0XX-11223344",
+                  },
                 ].map((item, index) => (
                   <div
                     key={index}
                     className="flex items-center justify-between p-3 bg-slate-50 rounded-sm hover:bg-slate-100 cursor-pointer transition-colors"
                   >
                     <div>
-                      <p className="font-medium text-sm text-slate-800">{item.name}</p>
+                      <p className="font-medium text-sm text-slate-800">
+                        {item.name}
+                      </p>
                       <p className="text-xs text-slate-500">{item.desc}</p>
                     </div>
                     <div className="flex items-center gap-1 text-police-600 text-sm">
@@ -593,6 +792,374 @@ export default function Release() {
           </div>
         </div>
       )}
+
+      <Modal
+        isOpen={releaseModalOpen}
+        onClose={() => setReleaseModalOpen(false)}
+        title="期满解除登记"
+        width="max-w-xl"
+        footer={
+          <>
+            <button
+              className="btn-secondary"
+              onClick={() => setReleaseModalOpen(false)}
+            >
+              取消
+            </button>
+            <button
+              className="btn-primary"
+              onClick={handleAddRelease}
+              disabled={!releaseForm.detaineeId}
+            >
+              <Check className="w-4 h-4" />
+              提交登记
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="form-label">
+              戒毒人员 <span className="text-warning-600">*</span>
+            </label>
+            <select
+              className="form-input"
+              value={releaseForm.detaineeId}
+              onChange={(e) =>
+                setReleaseForm({ ...releaseForm, detaineeId: e.target.value })
+              }
+            >
+              <option value="">请选择戒毒人员</option>
+              {detainees.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name} - {d.idCard}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="form-label">预计解除日期</label>
+              <input
+                type="date"
+                className="form-input"
+                value={releaseForm.releaseDate}
+                onChange={(e) =>
+                  setReleaseForm({ ...releaseForm, releaseDate: e.target.value })
+                }
+              />
+            </div>
+            <div>
+              <label className="form-label">联系电话</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="请输入联系电话"
+                value={releaseForm.contact}
+                onChange={(e) =>
+                  setReleaseForm({ ...releaseForm, contact: e.target.value })
+                }
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="form-label">出所鉴定结果</label>
+            <textarea
+              className="form-input min-h-[80px]"
+              placeholder="请输入出所鉴定结果"
+              value={releaseForm.assessmentResult}
+              onChange={(e) =>
+                setReleaseForm({
+                  ...releaseForm,
+                  assessmentResult: e.target.value,
+                })
+              }
+            />
+          </div>
+
+          <div>
+            <label className="form-label">安置去向</label>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="请输入安置地址或单位"
+              value={releaseForm.destination}
+              onChange={(e) =>
+                setReleaseForm({ ...releaseForm, destination: e.target.value })
+              }
+            />
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={releaseDetailModalOpen}
+        onClose={() => {
+          setReleaseDetailModalOpen(false);
+          setSelectedRelease(null);
+        }}
+        title="解除详情"
+        width="max-w-lg"
+        footer={
+          <>
+            <button
+              className="btn-secondary"
+              onClick={() => {
+                setReleaseDetailModalOpen(false);
+                setSelectedRelease(null);
+              }}
+            >
+              关闭
+            </button>
+            {selectedRelease?.status === "待审批" && (
+              <button
+                className="btn-primary"
+                onClick={() => {
+                  handleApproveRelease(selectedRelease.id);
+                  setReleaseDetailModalOpen(false);
+                  setSelectedRelease(null);
+                }}
+              >
+                <Check className="w-4 h-4" />
+                批准
+              </button>
+            )}
+            {selectedRelease?.status === "已批准" && (
+              <button
+                className="btn-primary"
+                onClick={() => {
+                  handleCompleteRelease(selectedRelease.id);
+                  setReleaseDetailModalOpen(false);
+                  setSelectedRelease(null);
+                }}
+              >
+                办理解除
+              </button>
+            )}
+          </>
+        }
+      >
+        {selectedRelease && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-4 pb-4 border-b border-slate-100">
+              <div className="w-14 h-14 rounded-full bg-gradient-to-br from-police-500 to-police-700 flex items-center justify-center">
+                <User className="w-7 h-7 text-white" />
+              </div>
+              <div>
+                <h4 className="text-lg font-semibold text-slate-800">
+                  {selectedRelease.detaineeName}
+                </h4>
+                <div className="flex items-center gap-2 mt-1">
+                  <StatusBadge
+                    type={
+                      selectedRelease.status === "已解除"
+                        ? "success"
+                        : selectedRelease.status === "已批准"
+                        ? "blue"
+                        : "warning"
+                    }
+                  >
+                    {selectedRelease.status}
+                  </StatusBadge>
+                  <span className="text-sm text-slate-500 flex items-center gap-1">
+                    <Calendar className="w-4 h-4" />
+                    {selectedRelease.releaseDate}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-sm">
+              <div className="flex">
+                <span className="text-slate-500 w-24 flex-shrink-0">出所鉴定：</span>
+                <span className="text-slate-700">
+                  {selectedRelease.assessmentResult || "待鉴定"}
+                </span>
+              </div>
+              <div className="flex">
+                <span className="text-slate-500 w-24 flex-shrink-0">安置去向：</span>
+                <span className="text-slate-700">
+                  {selectedRelease.destination || "待确认"}
+                </span>
+              </div>
+              <div className="flex">
+                <span className="text-slate-500 w-24 flex-shrink-0">联系方式：</span>
+                <span className="text-slate-700">
+                  {selectedRelease.contact || "待提供"}
+                </span>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-slate-100">
+              <h5 className="text-sm font-medium text-slate-700 mb-3">
+                解除流程进度
+              </h5>
+              <div className="space-y-3">
+                {[
+                  { title: "期满评估", done: true },
+                  { title: "出所鉴定", done: true },
+                  {
+                    title: "审批确认",
+                    done: selectedRelease.status !== "待审批",
+                  },
+                  {
+                    title: "文书办理",
+                    done:
+                      selectedRelease.status === "已解除" ||
+                      selectedRelease.status === "衔接中",
+                  },
+                  { title: "社区衔接", done: selectedRelease.status === "已解除" },
+                ].map((item, index) => (
+                  <div key={index} className="flex items-center gap-3">
+                    <div
+                      className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
+                        item.done
+                          ? "bg-health-100 text-health-700"
+                          : "bg-slate-100 text-slate-400"
+                      }`}
+                    >
+                      {item.done ? (
+                        <CheckCircle2 className="w-4 h-4" />
+                      ) : (
+                        <Clock className="w-3.5 h-3.5" />
+                      )}
+                    </div>
+                    <span
+                      className={`text-sm ${
+                        item.done ? "text-slate-700" : "text-slate-400"
+                      }`}
+                    >
+                      {item.title}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={aftercareModalOpen}
+        onClose={() => setAftercareModalOpen(false)}
+        title="新增后续照管记录"
+        width="max-w-xl"
+        footer={
+          <>
+            <button
+              className="btn-secondary"
+              onClick={() => setAftercareModalOpen(false)}
+            >
+              取消
+            </button>
+            <button
+              className="btn-primary"
+              onClick={handleAddAftercare}
+              disabled={!aftercareForm.detaineeId || !aftercareForm.content}
+            >
+              <Check className="w-4 h-4" />
+              保存记录
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="form-label">
+              戒毒人员 <span className="text-warning-600">*</span>
+            </label>
+            <select
+              className="form-input"
+              value={aftercareForm.detaineeId}
+              onChange={(e) =>
+                setAftercareForm({ ...aftercareForm, detaineeId: e.target.value })
+              }
+            >
+              <option value="">请选择戒毒人员</option>
+              {detainees.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name} - {d.idCard}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="form-label">记录日期</label>
+              <input
+                type="date"
+                className="form-input"
+                value={aftercareForm.date}
+                onChange={(e) =>
+                  setAftercareForm({ ...aftercareForm, date: e.target.value })
+                }
+              />
+            </div>
+            <div>
+              <label className="form-label">照管类型</label>
+              <select
+                className="form-input"
+                value={aftercareForm.type}
+                onChange={(e) =>
+                  setAftercareForm({
+                    ...aftercareForm,
+                    type: e.target.value as AftercareRecord["type"],
+                  })
+                }
+              >
+                <option value="社区对接">社区对接</option>
+                <option value="回访记录">回访记录</option>
+                <option value="复吸干预">复吸干预</option>
+                <option value="帮扶救助">帮扶救助</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="form-label">
+              记录内容 <span className="text-warning-600">*</span>
+            </label>
+            <textarea
+              className="form-input min-h-[100px]"
+              placeholder="请输入照管记录内容"
+              value={aftercareForm.content}
+              onChange={(e) =>
+                setAftercareForm({ ...aftercareForm, content: e.target.value })
+              }
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="form-label">联系人</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="请输入联系人姓名"
+                value={aftercareForm.contact}
+                onChange={(e) =>
+                  setAftercareForm({ ...aftercareForm, contact: e.target.value })
+                }
+              />
+            </div>
+            <div>
+              <label className="form-label">处理结果</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="请输入处理结果"
+                value={aftercareForm.result}
+                onChange={(e) =>
+                  setAftercareForm({ ...aftercareForm, result: e.target.value })
+                }
+              />
+            </div>
+          </div>
+        </div>
+      </Modal>
     </PageContainer>
   );
 }

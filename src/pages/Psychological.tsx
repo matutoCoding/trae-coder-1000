@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import ReactECharts from "echarts-for-react";
 import {
   Brain,
@@ -14,13 +14,16 @@ import {
   Frown,
   Angry,
   PartyPopper,
+  Check,
 } from "lucide-react";
 import PageContainer from "@/components/PageContainer";
 import StatCard from "@/components/StatCard";
 import DataTable from "@/components/DataTable";
 import type { Column } from "@/components/DataTable";
 import StatusBadge from "@/components/StatusBadge";
-import { counselings, psychAssessments } from "@/data/mock";
+import Modal from "@/components/Modal";
+import { useAppStore } from "@/store/useAppStore";
+import type { Counseling, PsychAssessment } from "@/types";
 
 const tabs = [
   { id: "counseling", label: "心理咨询" },
@@ -37,8 +40,80 @@ const moodMap: Record<string, { icon: typeof Smile; color: string }> = {
 
 export default function Psychological() {
   const [activeTab, setActiveTab] = useState("counseling");
+  const [counselingModalOpen, setCounselingModalOpen] = useState(false);
+  const [assessmentModalOpen, setAssessmentModalOpen] = useState(false);
 
-  const counselingColumns: Column<typeof counselings[0]>[] = [
+  const { detainees, counselings, psychAssessments, addCounseling, addPsychAssessment } =
+    useAppStore();
+
+  const [counselingForm, setCounselingForm] = useState({
+    detaineeId: "",
+    date: new Date().toISOString().split("T")[0],
+    counselor: "",
+    topic: "",
+    duration: 60,
+    mood: "稳定" as Counseling["mood"],
+    summary: "",
+  });
+
+  const [assessmentForm, setAssessmentForm] = useState({
+    detaineeId: "",
+    date: new Date().toISOString().split("T")[0],
+    scale: "SCL-90症状自评量表",
+    score: 50,
+    riskLevel: "低风险" as PsychAssessment["riskLevel"],
+    conclusion: "",
+  });
+
+  const highRiskCount = psychAssessments.filter((a) => a.riskLevel === "高风险").length;
+  const avgDuration = counselings.length > 0
+    ? Math.round(counselings.reduce((sum, c) => sum + c.duration, 0) / counselings.length)
+    : 0;
+
+  const handleAddCounseling = () => {
+    if (!counselingForm.detaineeId || !counselingForm.topic) return;
+    const detainee = detainees.find((d) => d.id === counselingForm.detaineeId);
+    if (!detainee) return;
+
+    addCounseling({
+      ...counselingForm,
+      detaineeName: detainee.name,
+    } as Omit<Counseling, "id">);
+
+    setCounselingForm({
+      detaineeId: "",
+      date: new Date().toISOString().split("T")[0],
+      counselor: "",
+      topic: "",
+      duration: 60,
+      mood: "稳定",
+      summary: "",
+    });
+    setCounselingModalOpen(false);
+  };
+
+  const handleAddAssessment = () => {
+    if (!assessmentForm.detaineeId) return;
+    const detainee = detainees.find((d) => d.id === assessmentForm.detaineeId);
+    if (!detainee) return;
+
+    addPsychAssessment({
+      ...assessmentForm,
+      detaineeName: detainee.name,
+    } as Omit<PsychAssessment, "id">);
+
+    setAssessmentForm({
+      detaineeId: "",
+      date: new Date().toISOString().split("T")[0],
+      scale: "SCL-90症状自评量表",
+      score: 50,
+      riskLevel: "低风险",
+      conclusion: "",
+    });
+    setAssessmentModalOpen(false);
+  };
+
+  const counselingColumns: Column<Counseling>[] = [
     { key: "date", title: "咨询日期", width: "120px" },
     {
       key: "detaineeName",
@@ -84,7 +159,7 @@ export default function Psychological() {
     { key: "summary", title: "咨询摘要" },
   ];
 
-  const assessmentColumns: Column<typeof psychAssessments[0]>[] = [
+  const assessmentColumns: Column<PsychAssessment>[] = [
     { key: "date", title: "评估日期", width: "120px" },
     {
       key: "detaineeName",
@@ -235,8 +310,6 @@ export default function Psychological() {
     { name: "抑郁情绪", count: 14, color: "bg-slate-100 text-slate-700" },
   ];
 
-  const highRiskCount = psychAssessments.filter((a) => a.riskLevel === "高风险").length;
-
   return (
     <PageContainer
       title="心理矫治"
@@ -244,13 +317,20 @@ export default function Psychological() {
       breadcrumbs={[{ label: "心理矫治" }]}
       actions={
         <div className="flex gap-3">
-          <button className="btn-secondary">
+          <button className="btn-secondary" onClick={() => setAssessmentModalOpen(true)}>
             <ClipboardList className="w-4 h-4" />
             心理测评
           </button>
-          <button className="btn-primary">
+          <button
+            className="btn-primary"
+            onClick={() =>
+              activeTab === "counseling"
+                ? setCounselingModalOpen(true)
+                : setAssessmentModalOpen(true)
+            }
+          >
             <Plus className="w-4 h-4" />
-            新增咨询记录
+            {activeTab === "counseling" ? "新增咨询记录" : "新增评估记录"}
           </button>
         </div>
       }
@@ -277,7 +357,7 @@ export default function Psychological() {
         />
         <StatCard
           title="平均咨询时长"
-          value="65分钟"
+          value={`${avgDuration}分钟`}
           icon={Clock}
           color="green"
         />
@@ -304,11 +384,7 @@ export default function Psychological() {
           <div className="lg:col-span-2 space-y-6">
             <div className="card">
               <h3 className="section-title">心理咨询记录</h3>
-              <DataTable
-                columns={counselingColumns}
-                data={counselings}
-                rowKey="id"
-              />
+              <DataTable columns={counselingColumns} data={counselings} rowKey="id" />
             </div>
 
             <div className="card">
@@ -323,7 +399,9 @@ export default function Psychological() {
                   </div>
                 ))}
                 {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => {
-                  const hasAppointment = [3, 5, 8, 10, 12, 15, 17, 19, 22, 24, 26].includes(day);
+                  const hasAppointment = [3, 5, 8, 10, 12, 15, 17, 19, 22, 24, 26].includes(
+                    day
+                  );
                   const isToday = day === 16;
                   return (
                     <div
@@ -336,7 +414,9 @@ export default function Psychological() {
                           : "hover:bg-slate-50"
                       }`}
                     >
-                      <span className={`text-xs ${isToday ? "text-white" : "text-slate-700"}`}>
+                      <span
+                        className={`text-xs ${isToday ? "text-white" : "text-slate-700"}`}
+                      >
                         {day}
                       </span>
                       {hasAppointment && !isToday && (
@@ -425,16 +505,38 @@ export default function Psychological() {
               <h3 className="section-title">风险等级分布</h3>
               <div className="space-y-3">
                 {[
-                  { level: "高风险", count: 1, color: "bg-warning-500", textColor: "text-warning-700", bgColor: "bg-warning-50" },
-                  { level: "中风险", count: 4, color: "bg-amber-500", textColor: "text-amber-700", bgColor: "bg-amber-50" },
-                  { level: "低风险", count: 12, color: "bg-health-500", textColor: "text-health-700", bgColor: "bg-health-50" },
+                  {
+                    level: "高风险",
+                    count: psychAssessments.filter((a) => a.riskLevel === "高风险").length,
+                    color: "bg-warning-500",
+                    textColor: "text-warning-700",
+                    bgColor: "bg-warning-50",
+                  },
+                  {
+                    level: "中风险",
+                    count: psychAssessments.filter((a) => a.riskLevel === "中风险").length,
+                    color: "bg-amber-500",
+                    textColor: "text-amber-700",
+                    bgColor: "bg-amber-50",
+                  },
+                  {
+                    level: "低风险",
+                    count: psychAssessments.filter((a) => a.riskLevel === "低风险").length,
+                    color: "bg-health-500",
+                    textColor: "text-health-700",
+                    bgColor: "bg-health-50",
+                  },
                 ].map((item) => (
                   <div key={item.level} className="flex items-center gap-3">
-                    <div className={`w-24 text-sm font-medium ${item.textColor}`}>{item.level}</div>
+                    <div className={`w-24 text-sm font-medium ${item.textColor}`}>
+                      {item.level}
+                    </div>
                     <div className="flex-1 h-6 bg-slate-100 rounded-sm overflow-hidden">
                       <div
                         className={`h-full ${item.color} rounded-sm transition-all`}
-                        style={{ width: `${(item.count / 17) * 100}%` }}
+                        style={{
+                          width: `${psychAssessments.length > 0 ? (item.count / psychAssessments.length) * 100 : 0}%`,
+                        }}
                       />
                     </div>
                     <span className={`w-10 text-sm font-medium text-right ${item.textColor}`}>
@@ -447,6 +549,306 @@ export default function Psychological() {
           </div>
         </div>
       )}
+
+      <Modal
+        isOpen={counselingModalOpen}
+        onClose={() => setCounselingModalOpen(false)}
+        title="新增心理咨询记录"
+        width="max-w-xl"
+        footer={
+          <>
+            <button
+              className="btn-secondary"
+              onClick={() => setCounselingModalOpen(false)}
+            >
+              取消
+            </button>
+            <button
+              className="btn-primary"
+              onClick={handleAddCounseling}
+              disabled={!counselingForm.detaineeId || !counselingForm.topic}
+            >
+              <Check className="w-4 h-4" />
+              保存记录
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="form-label">
+              戒毒人员 <span className="text-warning-600">*</span>
+            </label>
+            <select
+              className="form-input"
+              value={counselingForm.detaineeId}
+              onChange={(e) =>
+                setCounselingForm({
+                  ...counselingForm,
+                  detaineeId: e.target.value,
+                })
+              }
+            >
+              <option value="">请选择戒毒人员</option>
+              {detainees.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name} - {d.idCard}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="form-label">咨询日期</label>
+              <input
+                type="date"
+                className="form-input"
+                value={counselingForm.date}
+                onChange={(e) =>
+                  setCounselingForm({ ...counselingForm, date: e.target.value })
+                }
+              />
+            </div>
+            <div>
+              <label className="form-label">咨询师</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="请输入咨询师姓名"
+                value={counselingForm.counselor}
+                onChange={(e) =>
+                  setCounselingForm({
+                    ...counselingForm,
+                    counselor: e.target.value,
+                  })
+                }
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="form-label">
+                咨询主题 <span className="text-warning-600">*</span>
+              </label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="如：家庭关系、心理依赖"
+                value={counselingForm.topic}
+                onChange={(e) =>
+                  setCounselingForm({ ...counselingForm, topic: e.target.value })
+                }
+              />
+            </div>
+            <div>
+              <label className="form-label">咨询时长（分钟）</label>
+              <input
+                type="number"
+                className="form-input"
+                value={counselingForm.duration}
+                onChange={(e) =>
+                  setCounselingForm({
+                    ...counselingForm,
+                    duration: parseInt(e.target.value) || 0,
+                  })
+                }
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="form-label">情绪状态</label>
+            <div className="flex gap-3 mt-2">
+              {["积极", "稳定", "焦虑", "抑郁", "愤怒"].map((mood) => {
+                const moodInfo = moodMap[mood];
+                const MoodIcon = moodInfo?.icon || Meh;
+                return (
+                  <button
+                    key={mood}
+                    type="button"
+                    onClick={() =>
+                      setCounselingForm({
+                        ...counselingForm,
+                        mood: mood as Counseling["mood"],
+                      })
+                    }
+                    className={`flex-1 p-3 rounded-sm border-2 transition-all flex flex-col items-center gap-1 ${
+                      counselingForm.mood === mood
+                        ? "border-police-500 bg-police-50"
+                        : "border-slate-200 hover:border-slate-300"
+                    }`}
+                  >
+                    <MoodIcon
+                      className={`w-5 h-5 ${moodInfo?.color || "text-slate-500"}`}
+                    />
+                    <span className="text-xs">{mood}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="form-label">咨询摘要</label>
+            <textarea
+              className="form-input min-h-[100px]"
+              placeholder="请输入咨询内容摘要"
+              value={counselingForm.summary}
+              onChange={(e) =>
+                setCounselingForm({ ...counselingForm, summary: e.target.value })
+              }
+            />
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={assessmentModalOpen}
+        onClose={() => setAssessmentModalOpen(false)}
+        title="新增心理评估记录"
+        width="max-w-xl"
+        footer={
+          <>
+            <button
+              className="btn-secondary"
+              onClick={() => setAssessmentModalOpen(false)}
+            >
+              取消
+            </button>
+            <button
+              className="btn-primary"
+              onClick={handleAddAssessment}
+              disabled={!assessmentForm.detaineeId}
+            >
+              <Check className="w-4 h-4" />
+              保存记录
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="form-label">
+              戒毒人员 <span className="text-warning-600">*</span>
+            </label>
+            <select
+              className="form-input"
+              value={assessmentForm.detaineeId}
+              onChange={(e) =>
+                setAssessmentForm({
+                  ...assessmentForm,
+                  detaineeId: e.target.value,
+                })
+              }
+            >
+              <option value="">请选择戒毒人员</option>
+              {detainees.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name} - {d.idCard}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="form-label">评估日期</label>
+              <input
+                type="date"
+                className="form-input"
+                value={assessmentForm.date}
+                onChange={(e) =>
+                  setAssessmentForm({ ...assessmentForm, date: e.target.value })
+                }
+              />
+            </div>
+            <div>
+              <label className="form-label">测评量表</label>
+              <select
+                className="form-input"
+                value={assessmentForm.scale}
+                onChange={(e) =>
+                  setAssessmentForm({ ...assessmentForm, scale: e.target.value })
+                }
+              >
+                <option value="SCL-90症状自评量表">SCL-90症状自评量表</option>
+                <option value="SAS焦虑自评量表">SAS焦虑自评量表</option>
+                <option value="SDS抑郁自评量表">SDS抑郁自评量表</option>
+                <option value="MMPI明尼苏达多相人格测验">MMPI明尼苏达多相人格测验</option>
+                <option value="艾森克人格问卷">艾森克人格问卷</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="form-label">
+                评估得分：{assessmentForm.score}
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer mt-2"
+                value={assessmentForm.score}
+                onChange={(e) => {
+                  const score = parseInt(e.target.value);
+                  let riskLevel: PsychAssessment["riskLevel"] = "低风险";
+                  if (score >= 70) riskLevel = "高风险";
+                  else if (score >= 50) riskLevel = "中风险";
+                  setAssessmentForm({
+                    ...assessmentForm,
+                    score,
+                    riskLevel,
+                  });
+                }}
+              />
+            </div>
+            <div>
+              <label className="form-label">风险等级</label>
+              <div className="flex gap-2 mt-2">
+                {(["低风险", "中风险", "高风险"] as const).map((level) => (
+                  <button
+                    key={level}
+                    type="button"
+                    onClick={() =>
+                      setAssessmentForm({ ...assessmentForm, riskLevel: level })
+                    }
+                    className={`flex-1 py-2 px-3 rounded-sm text-sm font-medium transition-all ${
+                      assessmentForm.riskLevel === level
+                        ? level === "高风险"
+                          ? "bg-warning-100 text-warning-700 border border-warning-300"
+                          : level === "中风险"
+                          ? "bg-amber-100 text-amber-700 border border-amber-300"
+                          : "bg-health-100 text-health-700 border border-health-300"
+                        : "bg-slate-50 text-slate-600 border border-slate-200"
+                    }`}
+                  >
+                    {level}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="form-label">评估结论</label>
+            <textarea
+              className="form-input min-h-[100px]"
+              placeholder="请输入评估结论和建议"
+              value={assessmentForm.conclusion}
+              onChange={(e) =>
+                setAssessmentForm({
+                  ...assessmentForm,
+                  conclusion: e.target.value,
+                })
+              }
+            />
+          </div>
+        </div>
+      </Modal>
     </PageContainer>
   );
 }

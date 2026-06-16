@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import ReactECharts from "echarts-for-react";
 import {
   Pill,
@@ -10,13 +10,17 @@ import {
   User,
   Clock,
   TrendingUp,
+  X,
+  Check,
 } from "lucide-react";
 import PageContainer from "@/components/PageContainer";
 import StatCard from "@/components/StatCard";
 import DataTable from "@/components/DataTable";
 import type { Column } from "@/components/DataTable";
 import StatusBadge from "@/components/StatusBadge";
-import { treatments, urineTests, detainees } from "@/data/mock";
+import Modal from "@/components/Modal";
+import { useAppStore } from "@/store/useAppStore";
+import type { Treatment, UrineTest } from "@/types";
 
 const tabs = [
   { id: "treatment", label: "脱毒治疗" },
@@ -25,74 +29,71 @@ const tabs = [
 
 export default function Detoxification() {
   const [activeTab, setActiveTab] = useState("treatment");
+  const [treatmentModalOpen, setTreatmentModalOpen] = useState(false);
+  const [urineModalOpen, setUrineModalOpen] = useState(false);
 
-  const treatmentColumns: Column<typeof treatments[0]>[] = [
-    { key: "date", title: "治疗日期", width: "120px" },
-    {
-      key: "detaineeName",
-      title: "姓名",
-      width: "100px",
-      render: (row) => (
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-full bg-police-100 flex items-center justify-center">
-            <User className="w-3.5 h-3.5 text-police-600" />
-          </div>
-          <span className="font-medium text-sm">{row.detaineeName}</span>
-        </div>
-      ),
-    },
-    { key: "medication", title: "用药名称", width: "120px" },
-    { key: "dosage", title: "剂量", width: "100px" },
-    { key: "vitalSigns", title: "体征记录" },
-    {
-      key: "progress",
-      title: "治疗进度",
-      width: "160px",
-      render: (row) => (
-        <div className="flex items-center gap-2">
-          <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-police-500 to-police-700 rounded-full"
-              style={{ width: `${row.progress}%` }}
-            />
-          </div>
-          <span className="text-xs font-medium text-slate-600 w-8">{row.progress}%</span>
-        </div>
-      ),
-    },
-    { key: "doctor", title: "主治医生", width: "100px" },
-    { key: "notes", title: "备注" },
-  ];
+  const { detainees, treatments, urineTests, addTreatment, addUrineTest } = useAppStore();
 
-  const urineColumns: Column<typeof urineTests[0]>[] = [
-    { key: "testDate", title: "检测日期", width: "120px" },
-    {
-      key: "detaineeName",
-      title: "姓名",
-      width: "100px",
-      render: (row) => (
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-full bg-police-100 flex items-center justify-center">
-            <User className="w-3.5 h-3.5 text-police-600" />
-          </div>
-          <span className="font-medium text-sm">{row.detaineeName}</span>
-        </div>
-      ),
-    },
-    { key: "testType", title: "检测类型", width: "120px" },
-    {
-      key: "result",
-      title: "检测结果",
-      width: "100px",
-      render: (row) => (
-        <StatusBadge type={row.result === "阴性" ? "success" : "danger"}>
-          {row.result}
-        </StatusBadge>
-      ),
-    },
-    { key: "tester", title: "检验人员", width: "100px" },
-    { key: "notes", title: "备注" },
-  ];
+  const [treatmentForm, setTreatmentForm] = useState({
+    detaineeId: "",
+    date: new Date().toISOString().split("T")[0],
+    medication: "",
+    dosage: "",
+    vitalSigns: "",
+    progress: 0,
+    doctor: "",
+    notes: "",
+  });
+
+  const [urineForm, setUrineForm] = useState({
+    detaineeId: "",
+    testDate: new Date().toISOString().split("T")[0],
+    testType: "吗啡检测",
+    result: "阴性" as "阴性" | "阳性",
+    tester: "",
+    notes: "",
+  });
+
+  const positiveCount = urineTests.filter((u) => u.result === "阳性").length;
+  const treatmentCount = treatments.length;
+  const treatingCount = detainees.filter((d) => d.status === "治疗中").length;
+
+  const selectedDetaineeForTreatment = detainees.find(
+    (d) => d.id === treatmentForm.detaineeId
+  );
+  const selectedDetaineeForUrine = detainees.find(
+    (d) => d.id === urineForm.detaineeId
+  );
+
+  const urineStatOption = useMemo(
+    () => ({
+      tooltip: { trigger: "item" },
+      legend: { bottom: 0 },
+      series: [
+        {
+          type: "pie",
+          radius: ["45%", "70%"],
+          center: ["50%", "45%"],
+          avoidLabelOverlap: false,
+          itemStyle: { borderRadius: 4, borderColor: "#fff", borderWidth: 2 },
+          label: { show: false },
+          data: [
+            {
+              value: urineTests.filter((u) => u.result === "阴性").length,
+              name: "阴性",
+              itemStyle: { color: "#065f46" },
+            },
+            {
+              value: urineTests.filter((u) => u.result === "阳性").length,
+              name: "阳性",
+              itemStyle: { color: "#dc2626" },
+            },
+          ],
+        },
+      ],
+    }),
+    [urineTests]
+  );
 
   const vitalSignsOption = {
     tooltip: { trigger: "axis" },
@@ -132,26 +133,119 @@ export default function Detoxification() {
     ],
   };
 
-  const urineStatOption = {
-    tooltip: { trigger: "item" },
-    legend: { bottom: 0 },
-    series: [
-      {
-        type: "pie",
-        radius: ["45%", "70%"],
-        center: ["50%", "45%"],
-        avoidLabelOverlap: false,
-        itemStyle: { borderRadius: 4, borderColor: "#fff", borderWidth: 2 },
-        label: { show: false },
-        data: [
-          { value: 156, name: "阴性", itemStyle: { color: "#065f46" } },
-          { value: 8, name: "阳性", itemStyle: { color: "#dc2626" } },
-        ],
-      },
-    ],
+  const handleAddTreatment = () => {
+    if (!treatmentForm.detaineeId || !treatmentForm.medication) return;
+    const detainee = detainees.find((d) => d.id === treatmentForm.detaineeId);
+    if (!detainee) return;
+
+    addTreatment({
+      ...treatmentForm,
+      detaineeName: detainee.name,
+    } as Omit<Treatment, "id">);
+
+    setTreatmentForm({
+      detaineeId: "",
+      date: new Date().toISOString().split("T")[0],
+      medication: "",
+      dosage: "",
+      vitalSigns: "",
+      progress: 0,
+      doctor: "",
+      notes: "",
+    });
+    setTreatmentModalOpen(false);
   };
 
-  const positiveCount = urineTests.filter((u) => u.result === "阳性").length;
+  const handleAddUrineTest = () => {
+    if (!urineForm.detaineeId) return;
+    const detainee = detainees.find((d) => d.id === urineForm.detaineeId);
+    if (!detainee) return;
+
+    addUrineTest({
+      ...urineForm,
+      detaineeName: detainee.name,
+    } as Omit<UrineTest, "id">);
+
+    setUrineForm({
+      detaineeId: "",
+      testDate: new Date().toISOString().split("T")[0],
+      testType: "吗啡检测",
+      result: "阴性",
+      tester: "",
+      notes: "",
+    });
+    setUrineModalOpen(false);
+  };
+
+  const treatmentColumns: Column<Treatment>[] = [
+    { key: "date", title: "治疗日期", width: "120px" },
+    {
+      key: "detaineeName",
+      title: "姓名",
+      width: "100px",
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-full bg-police-100 flex items-center justify-center">
+            <User className="w-3.5 h-3.5 text-police-600" />
+          </div>
+          <span className="font-medium text-sm">{row.detaineeName}</span>
+        </div>
+      ),
+    },
+    { key: "medication", title: "用药名称", width: "120px" },
+    { key: "dosage", title: "剂量", width: "100px" },
+    { key: "vitalSigns", title: "体征记录" },
+    {
+      key: "progress",
+      title: "治疗进度",
+      width: "160px",
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-police-500 to-police-700 rounded-full"
+              style={{ width: `${row.progress}%` }}
+            />
+          </div>
+          <span className="text-xs font-medium text-slate-600 w-8">
+            {row.progress}%
+          </span>
+        </div>
+      ),
+    },
+    { key: "doctor", title: "主治医生", width: "100px" },
+    { key: "notes", title: "备注" },
+  ];
+
+  const urineColumns: Column<UrineTest>[] = [
+    { key: "testDate", title: "检测日期", width: "120px" },
+    {
+      key: "detaineeName",
+      title: "姓名",
+      width: "100px",
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-full bg-police-100 flex items-center justify-center">
+            <User className="w-3.5 h-3.5 text-police-600" />
+          </div>
+          <span className="font-medium text-sm">{row.detaineeName}</span>
+        </div>
+      ),
+    },
+    { key: "testType", title: "检测类型", width: "120px" },
+    {
+      key: "result",
+      title: "检测结果",
+      width: "100px",
+      render: (row) => (
+        <StatusBadge type={row.result === "阴性" ? "success" : "danger"}>
+          {row.result}
+        </StatusBadge>
+      ),
+    },
+    { key: "tester", title: "检验人员", width: "100px" },
+    { key: "notes", title: "备注" },
+  ];
 
   return (
     <PageContainer
@@ -164,9 +258,16 @@ export default function Detoxification() {
             <CalendarDays className="w-4 h-4" />
             生成检测计划
           </button>
-          <button className="btn-primary">
+          <button
+            className="btn-primary"
+            onClick={() =>
+              activeTab === "treatment"
+                ? setTreatmentModalOpen(true)
+                : setUrineModalOpen(true)
+            }
+          >
             <Plus className="w-4 h-4" />
-            新增治疗记录
+            {activeTab === "treatment" ? "新增治疗记录" : "新增尿检记录"}
           </button>
         </div>
       }
@@ -174,13 +275,13 @@ export default function Detoxification() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="治疗中人数"
-          value={detainees.filter((d) => d.status === "治疗中").length}
+          value={treatingCount}
           icon={Pill}
           color="blue"
         />
         <StatCard
           title="本月治疗记录"
-          value={treatments.length}
+          value={treatmentCount}
           icon={Activity}
           color="green"
           trend={{ value: 15, label: "环比" }}
@@ -205,7 +306,8 @@ export default function Detoxification() {
           <div>
             <p className="text-sm font-medium text-warning-800">阳性检测预警</p>
             <p className="text-xs text-warning-700 mt-1">
-              本月共有 {positiveCount} 人次尿检结果呈阳性，请重点关注相关人员并加强管控。
+              本月共有 {positiveCount}{" "}
+              人次尿检结果呈阳性，请重点关注相关人员并加强管控。
             </p>
           </div>
         </div>
@@ -235,14 +337,10 @@ export default function Detoxification() {
                 <h3 className="section-title mb-0">脱毒治疗记录</h3>
                 <div className="flex items-center gap-2 text-sm text-slate-500">
                   <Clock className="w-4 h-4" />
-                  <span>今日有 {treatments.length} 条治疗记录</span>
+                  <span>共有 {treatments.length} 条治疗记录</span>
                 </div>
               </div>
-              <DataTable
-                columns={treatmentColumns}
-                data={treatments}
-                rowKey="id"
-              />
+              <DataTable columns={treatmentColumns} data={treatments} rowKey="id" />
             </div>
           </div>
 
@@ -358,7 +456,14 @@ export default function Detoxification() {
                 <div>
                   <p className="text-sm text-slate-500">阴性率</p>
                   <p className="text-2xl font-semibold text-slate-800">
-                    {((urineTests.length - positiveCount) / urineTests.length * 100).toFixed(1)}%
+                    {urineTests.length > 0
+                      ? (
+                          ((urineTests.length - positiveCount) /
+                            urineTests.length) *
+                          100
+                        ).toFixed(1)
+                      : 0}
+                    %
                   </p>
                 </div>
               </div>
@@ -366,6 +471,292 @@ export default function Detoxification() {
           </div>
         </div>
       )}
+
+      <Modal
+        isOpen={treatmentModalOpen}
+        onClose={() => setTreatmentModalOpen(false)}
+        title="新增脱毒治疗记录"
+        width="max-w-xl"
+        footer={
+          <>
+            <button
+              className="btn-secondary"
+              onClick={() => setTreatmentModalOpen(false)}
+            >
+              取消
+            </button>
+            <button
+              className="btn-primary"
+              onClick={handleAddTreatment}
+              disabled={!treatmentForm.detaineeId || !treatmentForm.medication}
+            >
+              <Check className="w-4 h-4" />
+              保存记录
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="form-label">
+              戒毒人员 <span className="text-warning-600">*</span>
+            </label>
+            <select
+              className="form-input"
+              value={treatmentForm.detaineeId}
+              onChange={(e) =>
+                setTreatmentForm({
+                  ...treatmentForm,
+                  detaineeId: e.target.value,
+                })
+              }
+            >
+              <option value="">请选择戒毒人员</option>
+              {detainees.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name} - {d.idCard}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="form-label">治疗日期</label>
+              <input
+                type="date"
+                className="form-input"
+                value={treatmentForm.date}
+                onChange={(e) =>
+                  setTreatmentForm({ ...treatmentForm, date: e.target.value })
+                }
+              />
+            </div>
+            <div>
+              <label className="form-label">主治医生</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="请输入医生姓名"
+                value={treatmentForm.doctor}
+                onChange={(e) =>
+                  setTreatmentForm({ ...treatmentForm, doctor: e.target.value })
+                }
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="form-label">用药名称</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="如：美沙酮"
+                value={treatmentForm.medication}
+                onChange={(e) =>
+                  setTreatmentForm({
+                    ...treatmentForm,
+                    medication: e.target.value,
+                  })
+                }
+              />
+            </div>
+            <div>
+              <label className="form-label">剂量</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="如：20mg/日"
+                value={treatmentForm.dosage}
+                onChange={(e) =>
+                  setTreatmentForm({ ...treatmentForm, dosage: e.target.value })
+                }
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="form-label">体征记录</label>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="体温、血压、心率等"
+              value={treatmentForm.vitalSigns}
+              onChange={(e) =>
+                setTreatmentForm({
+                  ...treatmentForm,
+                  vitalSigns: e.target.value,
+                })
+              }
+            />
+          </div>
+
+          <div>
+            <label className="form-label">
+              治疗进度：{treatmentForm.progress}%
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+              value={treatmentForm.progress}
+              onChange={(e) =>
+                setTreatmentForm({
+                  ...treatmentForm,
+                  progress: parseInt(e.target.value),
+                })
+              }
+            />
+          </div>
+
+          <div>
+            <label className="form-label">备注</label>
+            <textarea
+              className="form-input min-h-[80px]"
+              placeholder="请输入治疗备注"
+              value={treatmentForm.notes}
+              onChange={(e) =>
+                setTreatmentForm({ ...treatmentForm, notes: e.target.value })
+              }
+            />
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={urineModalOpen}
+        onClose={() => setUrineModalOpen(false)}
+        title="新增尿检记录"
+        width="max-w-xl"
+        footer={
+          <>
+            <button
+              className="btn-secondary"
+              onClick={() => setUrineModalOpen(false)}
+            >
+              取消
+            </button>
+            <button
+              className="btn-primary"
+              onClick={handleAddUrineTest}
+              disabled={!urineForm.detaineeId}
+            >
+              <Check className="w-4 h-4" />
+              保存记录
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="form-label">
+              戒毒人员 <span className="text-warning-600">*</span>
+            </label>
+            <select
+              className="form-input"
+              value={urineForm.detaineeId}
+              onChange={(e) =>
+                setUrineForm({ ...urineForm, detaineeId: e.target.value })
+              }
+            >
+              <option value="">请选择戒毒人员</option>
+              {detainees.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name} - {d.idCard}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="form-label">检测日期</label>
+              <input
+                type="date"
+                className="form-input"
+                value={urineForm.testDate}
+                onChange={(e) =>
+                  setUrineForm({ ...urineForm, testDate: e.target.value })
+                }
+              />
+            </div>
+            <div>
+              <label className="form-label">检验人员</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="请输入检验人员"
+                value={urineForm.tester}
+                onChange={(e) =>
+                  setUrineForm({ ...urineForm, tester: e.target.value })
+                }
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="form-label">检测类型</label>
+              <select
+                className="form-input"
+                value={urineForm.testType}
+                onChange={(e) =>
+                  setUrineForm({ ...urineForm, testType: e.target.value })
+                }
+              >
+                <option value="吗啡检测">吗啡检测</option>
+                <option value="冰毒检测">冰毒检测</option>
+                <option value="K粉检测">K粉检测</option>
+                <option value="大麻检测">大麻检测</option>
+                <option value="综合检测">综合检测</option>
+              </select>
+            </div>
+            <div>
+              <label className="form-label">检测结果</label>
+              <div className="flex gap-4 mt-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="result"
+                    checked={urineForm.result === "阴性"}
+                    onChange={() =>
+                      setUrineForm({ ...urineForm, result: "阴性" })
+                    }
+                    className="w-4 h-4 text-health-600"
+                  />
+                  <span className="text-sm text-slate-700">阴性</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="result"
+                    checked={urineForm.result === "阳性"}
+                    onChange={() =>
+                      setUrineForm({ ...urineForm, result: "阳性" })
+                    }
+                    className="w-4 h-4 text-warning-600"
+                  />
+                  <span className="text-sm text-slate-700">阳性</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="form-label">备注</label>
+            <textarea
+              className="form-input min-h-[80px]"
+              placeholder="请输入检测备注"
+              value={urineForm.notes}
+              onChange={(e) =>
+                setUrineForm({ ...urineForm, notes: e.target.value })
+              }
+            />
+          </div>
+        </div>
+      </Modal>
     </PageContainer>
   );
 }
