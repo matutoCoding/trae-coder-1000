@@ -24,6 +24,7 @@ import DataTable from "@/components/DataTable";
 import type { Column } from "@/components/DataTable";
 import StatusBadge from "@/components/StatusBadge";
 import Modal from "@/components/Modal";
+import PersonProfileModal from "@/components/PersonProfileModal";
 import { useAppStore } from "@/store/useAppStore";
 import type { Detainee, HealthCheckup } from "@/types";
 
@@ -111,14 +112,20 @@ export default function Admission() {
   [detainees, searchText, filterLevel, filterStatus, filterGender]);
 
   const pendingCheckupCount = useMemo(() =>
-    detainees.filter((d) =>
+    filteredDetainees.filter((d) =>
       !healthCheckups.some((h) => h.detaineeId === d.id)
     ).length
-  , [detainees, healthCheckups]);
+  , [filteredDetainees, healthCheckups]);
 
   const completedCheckupCount = useMemo(() =>
-    healthCheckups.length
-  , [healthCheckups]);
+    filteredDetainees.filter((d) =>
+      healthCheckups.some((h) => h.detaineeId === d.id)
+    ).length
+  , [filteredDetainees, healthCheckups]);
+
+  const monthlyNewCount = useMemo(() =>
+    filteredDetainees.filter((d) => d.admitDate.startsWith("2025-06")).length
+  , [filteredDetainees]);
 
   const columns: Column<typeof detainees[0]>[] = [
     { key: "id", title: "编号", width: "100px" },
@@ -358,7 +365,11 @@ export default function Admission() {
         />
         <StatCard
           title="本月新增收治"
-          value={detainees.filter((d) => d.admitDate.startsWith("2025-06")).length}
+          value={
+            filterLevel || filterStatus || filterGender || searchText
+              ? `${monthlyNewCount} / ${detainees.filter((d) => d.admitDate.startsWith("2025-06")).length}`
+              : monthlyNewCount
+          }
           icon={FileText}
           color="green"
           trend={{ value: 12, label: "环比" }}
@@ -1287,321 +1298,14 @@ export default function Admission() {
         </div>
       </Modal>
 
-      <Modal
+      <PersonProfileModal
         isOpen={profileModalOpen}
         onClose={() => {
           setProfileModalOpen(false);
           setProfileDetaineeId("");
         }}
-        title="个人戒治画像"
-        width="max-w-3xl"
-        footer={
-          <button
-            className="btn-secondary"
-            onClick={() => {
-              setProfileModalOpen(false);
-              setProfileDetaineeId("");
-            }}
-          >
-            关闭
-          </button>
-        }
-      >
-        {(() => {
-          const d = detainees.find((item) => item.id === profileDetaineeId);
-          if (!d) return <p className="text-slate-500">未找到人员信息</p>;
-
-          const personTreatments = treatments.filter(
-            (t) => t.detaineeId === profileDetaineeId
-          );
-          const personUrineTests = urineTests.filter(
-            (u) => u.detaineeId === profileDetaineeId
-          );
-          const personCounselings = counselings.filter(
-            (c) => c.detaineeId === profileDetaineeId
-          );
-          const personAssessments = psychAssessments.filter(
-            (p) => p.detaineeId === profileDetaineeId
-          );
-          const personTrainings = trainingRecords.filter(
-            (t) => t.detaineeId === profileDetaineeId
-          );
-          const personViolations = violations.filter(
-            (v) => v.detaineeId === profileDetaineeId
-          );
-          const personHealth = healthCheckups.filter(
-            (h) => h.detaineeId === profileDetaineeId
-          );
-          const personDocs = documents.filter(
-            (doc) => doc.detaineeId === profileDetaineeId
-          );
-          const personLevels = levelChanges.filter(
-            (l) => l.detaineeId === profileDetaineeId
-          );
-
-          const avgProgress =
-            personTreatments.length > 0
-              ? Math.round(
-                  personTreatments.reduce((s, t) => s + t.progress, 0) /
-                    personTreatments.length
-                )
-              : 0;
-          const avgPerformance =
-            personTrainings.length > 0
-              ? Math.round(
-                  personTrainings.reduce((s, t) => s + t.performance, 0) /
-                    personTrainings.length
-                )
-              : 0;
-          const latestAssessment = [...personAssessments].sort(
-            (a, b) => b.date.localeCompare(a.date)
-          )[0];
-
-          return (
-            <div className="space-y-5">
-              <div className="flex items-center gap-4 pb-4 border-b border-slate-100">
-                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-police-500 to-police-700 flex items-center justify-center">
-                  <User className="w-8 h-8 text-white" />
-                </div>
-                <div className="flex-1">
-                  <h4 className="text-lg font-semibold text-slate-800">
-                    {d.name}
-                  </h4>
-                  <div className="flex items-center gap-3 mt-1">
-                    <span className="text-sm text-slate-500">{d.id}</span>
-                    <StatusBadge
-                      type={
-                        d.currentLevel === "一级"
-                          ? "danger"
-                          : d.currentLevel === "二级"
-                          ? "warning"
-                          : d.currentLevel === "三级"
-                          ? "info"
-                          : "success"
-                      }
-                    >
-                      {d.currentLevel}
-                    </StatusBadge>
-                    <StatusBadge
-                      type={
-                        d.status === "正常"
-                          ? "success"
-                          : d.status === "治疗中"
-                          ? "blue"
-                          : d.status === "隔离"
-                          ? "warning"
-                          : "info"
-                      }
-                    >
-                      {d.status}
-                    </StatusBadge>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm text-slate-500">入所日期</p>
-                  <p className="text-base font-semibold text-slate-800">
-                    {d.admitDate}
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-4 gap-3">
-                <div className="bg-blue-50 rounded-sm p-3 text-center">
-                  <p className="text-2xl font-bold text-blue-700">
-                    {personTreatments.length}
-                  </p>
-                  <p className="text-xs text-blue-600 mt-1">治疗记录</p>
-                </div>
-                <div className="bg-green-50 rounded-sm p-3 text-center">
-                  <p className="text-2xl font-bold text-green-700">
-                    {personUrineTests.length}
-                  </p>
-                  <p className="text-xs text-green-600 mt-1">尿检次数</p>
-                </div>
-                <div className="bg-purple-50 rounded-sm p-3 text-center">
-                  <p className="text-2xl font-bold text-purple-700">
-                    {personCounselings.length}
-                  </p>
-                  <p className="text-xs text-purple-600 mt-1">心理咨询</p>
-                </div>
-                <div className="bg-orange-50 rounded-sm p-3 text-center">
-                  <p className="text-2xl font-bold text-orange-700">
-                    {personTrainings.length}
-                  </p>
-                  <p className="text-xs text-orange-600 mt-1">训练记录</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="card mb-0">
-                  <h5 className="text-sm font-semibold text-slate-700 mb-3">
-                    生理脱毒
-                  </h5>
-                  <div className="space-y-2.5 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">平均治疗进度</span>
-                      <span className="font-medium text-slate-700">
-                        {avgProgress}%
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">尿检阴性率</span>
-                      <span className="font-medium text-health-600">
-                        {personUrineTests.length > 0
-                          ? (
-                              (personUrineTests.filter(
-                                (u) => u.result === "阴性"
-                              ).length /
-                                personUrineTests.length) *
-                              100
-                            ).toFixed(1) + "%"
-                          : "-"}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">体检次数</span>
-                      <span className="font-medium text-slate-700">
-                        {personHealth.length}次
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="card mb-0">
-                  <h5 className="text-sm font-semibold text-slate-700 mb-3">
-                    心理矫治
-                  </h5>
-                  <div className="space-y-2.5 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">最新评估</span>
-                      <span className="font-medium text-slate-700">
-                        {latestAssessment
-                          ? latestAssessment.scale.slice(0, 6)
-                          : "-"}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">风险等级</span>
-                      <StatusBadge
-                        type={
-                          latestAssessment?.riskLevel === "高风险"
-                            ? "danger"
-                            : latestAssessment?.riskLevel === "中风险"
-                            ? "warning"
-                            : "success"
-                        }
-                      >
-                        {latestAssessment?.riskLevel || "未评估"}
-                      </StatusBadge>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">咨询总时长</span>
-                      <span className="font-medium text-slate-700">
-                        {personCounselings.reduce(
-                          (s, c) => s + c.duration,
-                          0
-                        )}{" "}
-                        分钟
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="card mb-0">
-                  <h5 className="text-sm font-semibold text-slate-700 mb-3">
-                    康复训练
-                  </h5>
-                  <div className="space-y-2.5 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">平均表现分</span>
-                      <span className="font-medium text-slate-700">
-                        {avgPerformance}分
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">体能训练</span>
-                      <span className="font-medium text-slate-700">
-                        {
-                          personTrainings.filter(
-                            (t) => t.type === "体能训练"
-                          ).length
-                        }{" "}
-                        次
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">技能培训</span>
-                      <span className="font-medium text-slate-700">
-                        {
-                          personTrainings.filter(
-                            (t) => t.type === "技能培训"
-                          ).length
-                        }{" "}
-                        次
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="card mb-0">
-                  <h5 className="text-sm font-semibold text-slate-700 mb-3">
-                    所内管理
-                  </h5>
-                  <div className="space-y-2.5 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">违规记录</span>
-                      <span
-                        className={`font-medium ${
-                          personViolations.length > 0
-                            ? "text-warning-600"
-                            : "text-slate-700"
-                        }`}
-                      >
-                        {personViolations.length}次
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">等级变更</span>
-                      <span className="font-medium text-slate-700">
-                        {personLevels.length}次
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">当前等级</span>
-                      <span className="font-medium text-police-600">
-                        {d.currentLevel}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {personDocs.length > 0 && (
-                <div className="card mb-0">
-                  <h5 className="text-sm font-semibold text-slate-700 mb-3">
-                    已生成文书
-                  </h5>
-                  <div className="grid grid-cols-3 gap-2">
-                    {personDocs.map((doc) => (
-                      <div
-                        key={doc.id}
-                        className="p-2.5 bg-slate-50 rounded-sm border border-slate-100"
-                      >
-                        <p className="text-sm font-medium text-slate-700 truncate">
-                          {doc.type}
-                        </p>
-                        <p className="text-xs text-slate-400 mt-0.5">
-                          {doc.generatedAt}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })()}
-      </Modal>
+        detaineeId={profileDetaineeId}
+      />
     </PageContainer>
   );
 }

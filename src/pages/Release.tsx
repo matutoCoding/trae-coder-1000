@@ -24,6 +24,7 @@ import DataTable from "@/components/DataTable";
 import type { Column } from "@/components/DataTable";
 import StatusBadge from "@/components/StatusBadge";
 import Modal from "@/components/Modal";
+import PersonProfileModal from "@/components/PersonProfileModal";
 import { useAppStore } from "@/store/useAppStore";
 import type { Release, AftercareRecord, DocumentRecord } from "@/types";
 
@@ -52,6 +53,8 @@ export default function Release() {
   const [documentType, setDocumentType] = useState("解除强制隔离戒毒决定书");
   const [docDetailModalOpen, setDocDetailModalOpen] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<DocumentRecord | null>(null);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [profileDetaineeId, setProfileDetaineeId] = useState("");
 
   const {
     detainees,
@@ -69,6 +72,7 @@ export default function Release() {
     updateReleaseStatus,
     addAftercareRecord,
     addDocument,
+    updateDocumentStatus,
   } = useAppStore();
 
   const [releaseForm, setReleaseForm] = useState({
@@ -216,9 +220,9 @@ export default function Release() {
       content,
     });
 
-    alert("文书已生成，可在文书记录中查看");
     setDocumentModalOpen(false);
     setSelectedDocRelease(null);
+    setActiveTab("documents");
   };
 
   const openReleaseDetail = (release: Release) => {
@@ -288,7 +292,7 @@ export default function Release() {
     {
       key: "action",
       title: "操作",
-      width: "160px",
+      width: "200px",
       render: (row) => (
         <div className="flex gap-2">
           <button
@@ -296,6 +300,16 @@ export default function Release() {
             onClick={() => openReleaseDetail(row)}
           >
             详情
+          </button>
+          <button
+            className="text-xs text-police-600 hover:text-police-700 font-medium flex items-center gap-0.5"
+            onClick={() => {
+              setProfileDetaineeId(row.detaineeId);
+              setProfileModalOpen(true);
+            }}
+          >
+            <User className="w-3 h-3" />
+            画像
           </button>
           {row.status === "待审批" && (
             <button
@@ -928,14 +942,16 @@ export default function Release() {
                   documents.map((doc) => (
                     <div
                       key={doc.id}
-                      className="p-4 border border-slate-200 rounded-sm hover:border-police-300 hover:shadow-sm transition-all cursor-pointer"
-                      onClick={() => {
-                        setSelectedDoc(doc);
-                        setDocDetailModalOpen(true);
-                      }}
+                      className="p-4 border border-slate-200 rounded-sm hover:border-police-300 hover:shadow-sm transition-all"
                     >
                       <div className="flex items-start justify-between">
-                        <div className="flex items-start gap-3">
+                        <div
+                          className="flex items-start gap-3 cursor-pointer"
+                          onClick={() => {
+                            setSelectedDoc(doc);
+                            setDocDetailModalOpen(true);
+                          }}
+                        >
                           <div className="p-2 bg-blue-50 rounded-sm">
                             <FileText className="w-5 h-5 text-blue-600" />
                           </div>
@@ -951,17 +967,41 @@ export default function Release() {
                             </p>
                           </div>
                         </div>
-                        <StatusBadge
-                          type={
-                            doc.status === "已签发"
-                              ? "success"
-                              : doc.status === "已打印"
-                              ? "blue"
-                              : "info"
-                          }
-                        >
-                          {doc.status}
-                        </StatusBadge>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <StatusBadge
+                            type={
+                              doc.status === "已签发"
+                                ? "success"
+                                : doc.status === "已打印"
+                                ? "blue"
+                                : "info"
+                            }
+                          >
+                            {doc.status}
+                          </StatusBadge>
+                          {doc.status === "已生成" && (
+                            <button
+                              className="text-xs text-blue-600 hover:text-blue-800 font-medium px-2 py-1 bg-blue-50 rounded-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateDocumentStatus(doc.id, "已打印");
+                              }}
+                            >
+                              打印
+                            </button>
+                          )}
+                          {doc.status === "已打印" && (
+                            <button
+                              className="text-xs text-green-600 hover:text-green-800 font-medium px-2 py-1 bg-green-50 rounded-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateDocumentStatus(doc.id, "已签发");
+                              }}
+                            >
+                              签发
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))
@@ -1921,6 +1961,15 @@ export default function Release() {
           </div>
         )}
       </Modal>
+
+      <PersonProfileModal
+        isOpen={profileModalOpen}
+        onClose={() => {
+          setProfileModalOpen(false);
+          setProfileDetaineeId("");
+        }}
+        detaineeId={profileDetaineeId}
+      />
     </PageContainer>
   );
 }

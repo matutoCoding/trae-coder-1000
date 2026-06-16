@@ -23,6 +23,7 @@ import DataTable from "@/components/DataTable";
 import type { Column } from "@/components/DataTable";
 import StatusBadge from "@/components/StatusBadge";
 import Modal from "@/components/Modal";
+import PersonProfileModal from "@/components/PersonProfileModal";
 import { useAppStore } from "@/store/useAppStore";
 import type { Treatment, UrineTest } from "@/types";
 
@@ -36,6 +37,8 @@ export default function Detoxification() {
   const [treatmentModalOpen, setTreatmentModalOpen] = useState(false);
   const [urineModalOpen, setUrineModalOpen] = useState(false);
   const [planModalOpen, setPlanModalOpen] = useState(false);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [profileDetaineeId, setProfileDetaineeId] = useState("");
 
   const { detainees, treatments, urineTests, addTreatment, addUrineTest } = useAppStore();
 
@@ -530,7 +533,7 @@ export default function Detoxification() {
                 )}
               </div>
 
-              <DataTable columns={treatmentColumns} data={treatments} rowKey="id" />
+              <DataTable columns={treatmentColumns} data={selectedProfileId ? profileTreatments : treatments} rowKey="id" />
             </div>
           </div>
 
@@ -563,11 +566,23 @@ export default function Detoxification() {
                         </StatusBadge>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-2xl font-bold text-police-700">
-                        {profileTreatments.length}
-                      </p>
-                      <p className="text-xs text-slate-500">治疗记录</p>
+                    <div className="flex items-center gap-3">
+                      <button
+                        className="text-xs text-police-600 hover:text-police-700 font-medium flex items-center gap-1 px-2 py-1 bg-white/60 rounded-sm"
+                        onClick={() => {
+                          setProfileDetaineeId(selectedProfileId);
+                          setProfileModalOpen(true);
+                        }}
+                      >
+                        <User className="w-3 h-3" />
+                        完整画像
+                      </button>
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-police-700">
+                          {profileTreatments.length}
+                        </p>
+                        <p className="text-xs text-slate-500">治疗记录</p>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1167,6 +1182,15 @@ export default function Detoxification() {
           );
         })()}
       </Modal>
+
+      <PersonProfileModal
+        isOpen={profileModalOpen}
+        onClose={() => {
+          setProfileModalOpen(false);
+          setProfileDetaineeId("");
+        }}
+        detaineeId={profileDetaineeId}
+      />
     </PageContainer>
   );
 }
